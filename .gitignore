@@ -2,3 +2,4 @@
 *.pdf.tmp
 .resume.tmp
 /tmp/
+templates/*.pdf

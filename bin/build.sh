@@ -16,8 +16,8 @@ if [ $# -eq 0 ]; then
     find "$ROOT/applications" -name resume.typ -type f 2>/dev/null | sort
   )
   [ ${#targets[@]} -eq 0 ] && {
-    echo "no applications yet — building base templates instead"
-    targets=("$ROOT/templates/base-swe.typ" "$ROOT/templates/base-csa.typ")
+    echo "no applications yet — nothing to build"
+    exit 0
   }
 else
   for a in "$@"; do
@@ -25,11 +25,32 @@ else
   done
 fi
 
+TODO_IDS="$(awk '/^      - id: /{id=$3} /text: "TODO:/{print id}' "$ROOT/content/projects.yml")"
+
+uses_todo() {
+  local file="$1" id
+  for id in $TODO_IDS; do
+    grep -q "\"$id\"" "$file" && { printf '%s' "$id"; return 0; }
+  done
+  return 1
+}
+
 fail=0
+if hit="$(uses_todo "$ROOT/content/defaults.yml")"; then
+  printf '  TODO     content/defaults.yml uses the not-yet-true bullet "%s"\n' "$hit"
+  fail=1
+fi
+
 for f in "${targets[@]}"; do
   [ -f "$f" ] || { printf '  MISSING  %s\n' "$f"; fail=1; continue; }
   out="${f%.typ}.pdf"
   rel="${f#"$ROOT"/}"
+
+  if hit="$(uses_todo "$f")"; then
+    printf '  TODO     %s  <- selects "%s", which is not true yet\n' "$rel" "$hit"
+    fail=1
+    continue
+  fi
 
   if ! typst compile --root "$ROOT" "$f" "$out" 2>/tmp/typst-err.$$; then
     printf '  FAILED   %s\n' "$rel"

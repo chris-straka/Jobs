@@ -12,14 +12,15 @@ brew install typst
 ## Every application
 
 ```bash
-# 1. copy the job description to your clipboard, then:
-bin/new-app.sh "Stripe" "Backend Engineer" swe -r us -u https://posting
+# 1. paste the job URL; it prompts for the rest, then for the description
+#    (paste it, Ctrl-D). Company is guessed from the URL.
+bin/new-app.sh https://example.com/jobs/quality-engineer-123
 
-# 2. tailor it (in your editor, with Claude Code):
-claude "tailor applications/2026-09-02_stripe_backend-engineer to job.md"
+# 2. tailor it (in your editor, with Claude Code or Codex):
+claude "tailor applications/2026-09-02_example-co_quality-engineer to job.md"
 
 # 3. compile + verify it's still one page:
-bin/build.sh applications/2026-09-02_stripe_backend-engineer
+bin/build.sh applications/2026-09-02_example-co_quality-engineer
 ```
 
 `typst watch --root . applications/<dir>/resume.typ` gives a live preview while
@@ -29,8 +30,9 @@ you edit.
 
 - `content/` — every bullet you've ever written, with stable ids. Fix a typo
   here and it's fixed in every future resume.
-- `templates/base-swe.typ`, `base-csa.typ` — the starting selection for each
-  track. Edit these when your *default* pitch changes, not for one posting.
+- `content/defaults.yml` — the projects each track starts with. Edit this when
+  your *default* pitch changes, not for one posting.
+- `templates/lib.typ` — the renderer. All layout lives here.
 - `applications/` — the archive. `job.md` is the posting verbatim, `resume.pdf`
   is exactly what you sent.
 - `applications.csv` — the tracker.

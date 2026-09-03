@@ -10,6 +10,7 @@
 #let db-education = yaml("../content/education.yml")
 #let db-projects = yaml("../content/projects.yml")
 #let db-skills = yaml("../content/skills.yml")
+#let db-defaults = yaml("../content/defaults.yml")
 
 // ---- lookups (fail loudly on a bad id rather than silently dropping) -------
 
@@ -33,21 +34,22 @@
 //
 // DENSITY KNOBS: when a resume spills onto page 2, turn these down before you
 // start cutting content. In rough order of what to try first:
-//   leading (0.60 -> 0.52), bullet-gap, section-gap, font-size (10 -> 9.5)
-// Below 9pt font or 0.45in margin it starts to look cramped; cut a bullet
+//   leading (0.45 -> 0.40), bullet-gap, section-gap, font-size (12 -> 11)
+// Below 10pt font or 0.6in margin it starts to look cramped; cut a bullet
 // instead.
 
 #let resume(
   track: "swe",
-  region: "us",
+  region: "ca", 
   summary: auto, // auto = default for track; or pass a tailored string
   skills: auto, // auto = default for track; or pass an array of lines
-  projects: (), // ((id: "dfs", bullets: ("build", "locking")), ...)
-  font-size: 10pt,
-  leading: 0.6em,
-  section-gap: 9pt,
-  bullet-gap: 3pt,
-  margin: 0.5in,
+  projects: auto,
+  font-size: 12pt,
+  leading: 0.45em,
+  section-gap: 17pt,
+  bullet-gap: 6pt,
+  project-gap: 13pt,
+  margin: 1in,
   name-size: 19pt,
   font: ("Charter", "Georgia", "Libertinus Serif", "New Computer Modern"),
 ) = {
@@ -64,10 +66,10 @@
 
   let section(title) = {
     v(section-gap, weak: true)
-    text(size: small, weight: "bold", tracking: 0.14em)[#upper(title)]
-    v(2.5pt, weak: true)
+    text(size: small, weight: "bold")[#upper(title)]
+    v(3.5pt, weak: true)
     line(length: 100%, stroke: 0.6pt)
-    v(4pt, weak: true)
+    v(6.5pt, weak: true)
   }
 
   // ---- header ----
@@ -86,6 +88,7 @@
     v(2pt, weak: true)
     align(center)[#text(size: small)[#auth]]
   }
+  v(4pt, weak: true)
 
   // ---- summary ----
   let summary-text = if summary == auto { db-profile.summaries.at(track) } else { summary }
@@ -112,17 +115,18 @@
   }
 
   // ---- projects ----
-  if projects.len() > 0 {
+  let project-sel = if projects == auto { db-defaults.at(track, default: ()) } else { projects }
+  if project-sel.len() > 0 {
     section("Technical Systems Projects")
-    for (i, sel) in projects.enumerate() {
+    for (i, sel) in project-sel.enumerate() {
       let p = find-project(sel.id)
       let title = sel.at("label", default: p.name)
       let ctx = sel.at("context", default: p.context)
       let stack = sel.at("stack", default: none) // pass "" to hide, string to override
 
-      if i > 0 { v(6pt, weak: true) }
+      if i > 0 { v(project-gap, weak: true) }
 
-      block(width: 100%, below: 3pt)[
+      block(width: 100%, below: 5.5pt)[
         #text(weight: "bold")[#title]
         #if stack == none and p.stack != "" [ #text(size: small)[| #p.stack] ]
         #if stack != none and stack != "" [ #text(size: small)[| #stack] ]

@@ -10,8 +10,9 @@ Region only controls the location and work-authorization lines in the header.
 ## Layout
 
 ```
-content/         master bullet library — single source of truth
-templates/       lib.typ renderer + base-swe.typ / base-csa.typ starting points
+content/         master bullet library — single source of truth,
+                 including defaults.yml (each track's starting projects)
+templates/       lib.typ — the renderer, all layout lives here
 applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, resume.pdf, notes.md
 applications.csv tracker
 bin/             new-app.sh (scaffold), build.sh (compile + page check)
@@ -20,7 +21,7 @@ bin/             new-app.sh (scaffold), build.sh (compile + page check)
 ## Commands
 
 ```bash
-bin/new-app.sh "Company" "Role Title" swe -r us -u https://posting
+bin/new-app.sh https://posting            # prompts for the rest
 bin/build.sh applications/2026-09-02_company_role   # one
 bin/build.sh                                        # everything
 typst watch --root . applications/<dir>/resume.typ  # live preview while editing
@@ -34,16 +35,17 @@ typst watch --root . applications/<dir>/resume.typ  # live preview while editing
 When asked to tailor an application:
 
 1. Read `job.md` in that folder. It's the posting, verbatim.
-2. Edit **only** that folder's `resume.typ`. Never edit `templates/base-*.typ`
-   (those are the starting points for every future application) and never edit
+2. Edit **only** that folder's `resume.typ`. Never edit `content/defaults.yml`
+   (it's the starting point for every future application) and never edit
    `content/*.yml` just to fit one posting.
 3. Three levers, in order of leverage:
    - `summary:` — override it with 2–3 lines echoing the posting's own language.
      This is the highest-value edit. The default is generic.
    - `skills:` — override with the same skills reordered so the posting's stack
      comes first.
-   - `projects:` — reorder so the project answering the posting's hardest
-     requirement is first, and swap `bullets:` to the ids that match.
+   - `projects:` — defaults to the track's list in `content/defaults.yml`.
+     Write an explicit list in `resume.typ` to reorder so the project answering
+     the posting's hardest requirement is first, with `bullets:` ids that match.
 4. Run `bin/build.sh <dir>`. It fails if the PDF is more than one page.
 5. Report which bullets you swapped in and why.
 
@@ -65,9 +67,9 @@ When asked to tailor an application:
 
 Turn these down in the `#resume(...)` call before cutting content:
 `leading` (0.6em → 0.52em), `bullet-gap`, `section-gap`, then `font-size`
-(10pt → 9.5pt). Below 9pt font or 0.45in margin it looks cramped — cut a bullet
-instead. The base templates currently fill about 60% of the page, so there's
-room for roughly 6–8 more bullets before this matters.
+(12pt → 11pt). Below 10pt font or 0.6in margin it looks cramped — cut a bullet
+instead. The default is 12pt with 1in margins, which fills the page at 6–7 bullets.
+Adding a bullet means dropping one, or turning the knobs down.
 
 ## Content notes
 
