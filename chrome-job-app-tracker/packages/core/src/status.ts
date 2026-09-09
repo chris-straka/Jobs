@@ -74,7 +74,7 @@ export function listApplications(root: string): { rows: ListedApp[]; warnings: s
       pdfState = "no-typ";
     } else if (!existsSync(pdf)) {
       pdfState = "missing";
-      warnings.push(`${r.folder}: resume.pdf missing — run japp build ${r.folder}`);
+      warnings.push(`${r.folder}: resume.pdf missing — run ja build ${r.folder}`);
     } else if (statSync(typ).mtimeMs > statSync(pdf).mtimeMs) {
       pdfState = "stale";
       warnings.push(`${r.folder}: resume.typ newer than pdf — rebuild before sending`);

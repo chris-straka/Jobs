@@ -3,12 +3,12 @@
 Click-to-capture companion for the Jobs repo. On a job posting, open the
 popup, confirm the fields, hit Save: the posting lands as a new
 `applications/YYYY-MM-DD_company_role/` folder with a fit report, exactly as
-if you had run `japp add` yourself.
+if you had run `ja add` yourself.
 
-All repo operations live in `packages/core/` (`@jat/core`): the `japp` CLI,
+All repo operations live in `packages/core/` (`@jat/core`): the `ja` CLI,
 the server, and the tests all call it. Install the CLI once with
-`packages/cli/install.sh` (compiles `japp` to `~/.local/bin`), then
-`japp --help` is the whole manual.
+`packages/cli/install.sh` (compiles `ja` to `~/.local/bin`), then
+`ja --help` is the whole manual.
 
 Two parts, one thin and one doing the work:
 
@@ -21,7 +21,7 @@ Two parts, one thin and one doing the work:
   server, and shows a server health dot. Nothing in the browser writes files —
   browsers don't allow that.
 - `packages/server/` — local Bun server (default `http://127.0.0.1:8765`).
-  Validates the capture, scaffolds via `@jat/core` (the same code `japp`
+  Validates the capture, scaffolds via `@jat/core` (the same code `ja`
   runs), runs a deterministic fit analysis against `content/projects.yml`,
   verifies the starter resume build, and optionally asks a model for a
   summary draft + bullet picks.

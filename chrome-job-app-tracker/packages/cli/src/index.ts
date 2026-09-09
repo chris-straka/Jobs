@@ -12,9 +12,9 @@ import pkg from "../package.json" with { type: "json" };
 const COMMANDS = ["add", "build", "list", "status", "server", "probe"] as const;
 
 function help(): string {
-  return `japp v${(pkg as { version: string }).version} — one CLI for the Jobs repo
+  return `ja v${(pkg as { version: string }).version} — one CLI for the Jobs repo
 
-Usage: japp [--root DIR] <command> [args]
+Usage: ja [--root DIR] <command> [args]
 
   add [url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk] [-d file|-]
       scaffold applications/YYYY-MM-DD_company_role/ (prompts for the rest)
@@ -29,7 +29,7 @@ Usage: japp [--root DIR] <command> [args]
   probe
       verify the model wiring with a tiny completion
 
-Run from the repo root, or pass --root. japp <command> --help for detail.`;
+Run from the repo root, or pass --root. ja <command> --help for detail.`;
 }
 
 function rootFrom(argv: string[]): { root: string; rest: string[] } {
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         options: { help: { type: "boolean", short: "h" } },
       });
       if (values.help) {
-        console.log("Usage: japp build [resume.typ|folder]...\n\nNo args builds everything.");
+        console.log("Usage: ja build [resume.typ|folder]...\n\nNo args builds everything.");
         return;
       }
       const targets = positionals.length > 0 ? positionals : allResumes(root);
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
       return;
     case "status": {
       const [folder, status] = args;
-      if (!folder || !status) die("usage: japp status <folder> <status>");
+      if (!folder || !status) die("usage: ja status <folder> <status>");
       const parsed = AppStatus.safeParse(status);
       if (!parsed.success) die(`status must be one of: ${AppStatus.options.join(" ")}`);
       await statusCommand(root, folder, parsed.data);
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
         options: { port: { type: "string" }, help: { type: "boolean", short: "h" } },
       });
       if (values.help) {
-        console.log("Usage: japp server [--port N]");
+        console.log("Usage: ja server [--port N]");
         return;
       }
       await serverCommand(root, values.port ? Number(values.port) : undefined);

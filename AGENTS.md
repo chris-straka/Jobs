@@ -15,23 +15,23 @@ content/         master bullet library — single source of truth,
 templates/       lib.typ — the renderer, all layout lives here
 applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, chris-straka-resume.pdf, notes.md
 applications.csv tracker
-chrome-job-app-tracker/  the tooling: japp CLI + @jat/core (the one
+chrome-job-app-tracker/  the tooling: ja CLI + @jat/core (the one
                  implementation of add/build/list/status), local server,
                  MV3 extension, native-messaging host
 ```
 
-One implementation: `@jat/core` (add/build/list/status). The `japp` CLI,
+One implementation: `@jat/core` (add/build/list/status). The `ja` CLI,
 the server, and the tests all call it — never reimplement an operation,
 never shell out to a duplicate.
 
 ## Commands
 
 ```bash
-japp add https://posting            # prompts for the rest
-japp build applications/2026-09-02_company_role   # one
-japp build                                        # everything
-japp list                                         # tracker + drift check
-japp status <folder> applied                      # csv + job.md together
+ja add https://posting            # prompts for the rest
+ja build applications/2026-09-02_company_role   # one
+ja build                                        # everything
+ja list                                         # tracker + drift check
+ja status <folder> applied                      # csv + job.md together
 typst watch --root . applications/<dir>/resume.typ  # live preview while editing
 ```
 
@@ -54,7 +54,7 @@ When asked to tailor an application:
    - `projects:` — defaults to the track's list in `content/defaults.yml`.
      Write an explicit list in `resume.typ` to reorder so the project answering
      the posting's hardest requirement is first, with `bullets:` ids that match.
-4. Run `japp build <dir>`. It fails if the PDF is more than one page.
+4. Run `ja build <dir>`. It fails if the PDF is more than one page.
 5. Report which bullets you swapped in and why.
 
 ## Hard rules

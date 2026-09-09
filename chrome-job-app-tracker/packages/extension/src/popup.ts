@@ -255,7 +255,7 @@ async function save(): Promise<void> {
         `Suggested bullets: ${model.bullets.map((b) => `${b.project}:${b.id}`).join(", ")}`,
       );
   }
-  lines.push("", "Next: review job.md, tailor resume.typ, run japp build, update notes.md.");
+  lines.push("", "Next: review job.md, tailor resume.typ, run ja build, update notes.md.");
   show(lines.join("\n"));
 }
 

@@ -59,7 +59,7 @@ function json(res: http.ServerResponse, status: number, value: unknown): void {
  *
  * Routes: `GET /health`, `POST /api/capture` (Zod-validated), `OPTIONS`
  * preflight, plus resolve/status. A capture scaffolds via `@jat/core`
- * (the same code `japp` runs), scores fit against the bullet library,
+ * (the same code `ja` runs), scores fit against the bullet library,
  * verifies the build, and optionally asks the model. Failures surface as
  * 400 (bad payload) or 500 (scaffold failed).
  */
