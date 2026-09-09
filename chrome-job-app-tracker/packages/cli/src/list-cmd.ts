@@ -127,7 +127,7 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
       r.company.slice(0, 12),
       r.role.slice(0, 24),
       r.track,
-      r.region,
+      r.region.toUpperCase(),
       r.status,
       r.pdf,
       r.jobStatus,

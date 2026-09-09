@@ -14,12 +14,14 @@ test("popup save creates an application through the real server", async ({ page,
         jobUrl,
         description,
         serverUrl,
+        serverRoot,
       }: {
         jobUrl: string;
         description: string;
         serverUrl: string;
+        serverRoot: string;
       }) => {
-        const store: Record<string, unknown> = { server: serverUrl };
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
         const fakeChrome = {
           storage: {
             local: {
@@ -48,6 +50,7 @@ test("popup save creates an application through the real server", async ({ page,
         jobUrl: `${site.url}/e2e/fixture-job.html`,
         description: `prefill ${"x".repeat(200)}`,
         serverUrl: capture.url,
+        serverRoot: dir,
       },
     );
 
@@ -82,21 +85,26 @@ test("popup save creates an application through the real server", async ({ page,
     const csv2 = await readFile(path.join(dir, "applications.csv"), "utf8");
     expect(csv2).toContain('"applied"');
 
-    // Clipboard helpers copy runnable commands.
-    await page.locator("#copy-stop").click();
+    // One copy button follows the server: stop cmd while online...
+    await page.locator("#copy-srv").click();
     await expect(page.locator("#status")).toContainText("Copied:");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       `pkill -f "server/src/index.ts"`,
     );
-    await page.locator("#copy-start").click();
+
+    // ...start cmd once offline.
+    capture.stop();
+    await page.reload();
+    await expect(page.locator("#health")).toContainText("Job server offline");
+    await page.locator("#copy-srv").click();
+    await expect(page.locator("#status")).toContainText("Copied:");
     const startCmd = await page.evaluate(() => navigator.clipboard.readText());
     expect(startCmd).toContain("bun run server");
     expect(startCmd).toContain(dir);
 
-    // No native host here: native buttons hide, copy buttons carry the load.
+    // No native host here: native buttons hide, copy button carries the load.
     await expect(page.locator("#native-row")).toBeHidden();
-    await expect(page.locator("#copy-start")).toBeVisible();
-    await expect(page.locator("#copy-stop")).toBeVisible();
+    await expect(page.locator("#copy-srv")).toBeVisible();
   } finally {
     site.close();
     capture.stop();

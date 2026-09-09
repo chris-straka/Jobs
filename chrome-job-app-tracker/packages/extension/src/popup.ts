@@ -18,6 +18,15 @@ function serverBase(): string {
   return (el("server") as HTMLInputElement).value.trim().replace(/\/$/, "");
 }
 
+let serverOnline = false;
+
+/** The single copy button follows the server: stop cmd when up, start cmd when down. */
+function refreshCopyButton(): void {
+  (el("copy-srv") as HTMLButtonElement).textContent = serverOnline
+    ? "⧉ Copy stop cmd"
+    : "⧉ Copy start cmd";
+}
+
 async function checkHealth(): Promise<void> {
   const dot = el("health");
   try {
@@ -25,6 +34,7 @@ async function checkHealth(): Promise<void> {
     if (res.ok) {
       dot.textContent = "● Job server online";
       dot.style.color = "green";
+      serverOnline = true;
       const body = (await res.json().catch(() => null)) as { root?: unknown } | null;
       if (body && typeof body.root === "string") {
         await chrome.storage.local.set({ serverRoot: body.root });
@@ -32,11 +42,14 @@ async function checkHealth(): Promise<void> {
     } else {
       dot.textContent = "● Job server error";
       dot.style.color = "red";
+      serverOnline = false;
     }
   } catch {
     dot.textContent = "● Job server offline";
     dot.style.color = "red";
+    serverOnline = false;
   }
+  refreshCopyButton();
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -325,8 +338,16 @@ document.addEventListener("DOMContentLoaded", () => {
   (el("server") as HTMLInputElement).addEventListener("input", () => void checkHealth());
   el("save").addEventListener("click", () => void save());
   el("mark-applied").addEventListener("click", () => void markApplied());
-  el("copy-start").addEventListener("click", () => void copyStart());
-  el("copy-stop").addEventListener("click", () => void copyStop());
+  el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));
   el("srv-start").addEventListener("click", () => void nativeStart());
   el("srv-stop").addEventListener("click", () => void nativeStop());
+  // The popup is short-lived, but while it's open keep the state honest.
+  let polling = false;
+  window.setInterval(() => {
+    if (polling) return;
+    polling = true;
+    void Promise.all([checkHealth(), refreshNative()]).finally(() => {
+      polling = false;
+    });
+  }, 5000);
 });
