@@ -100,6 +100,12 @@ async function main(): Promise<void> {
       return;
     case "status": {
       const [folder, status] = args;
+      if (folder === "--help" || folder === "-h") {
+        console.log(
+          `Usage: ja status <folder> <stage>\n\nMoves one application to its next stage, updating applications.csv\nand the job.md header together so they cannot drift apart.\n\nstages: ${AppStatus.options.join(", ")}\n\nExample:\n  ja status applications/2026-09-02_acme_engineer applied`,
+        );
+        return;
+      }
       if (!folder || !status) die("usage: ja status <folder> <status>");
       const parsed = AppStatus.safeParse(status);
       if (!parsed.success) die(`status must be one of: ${AppStatus.options.join(" ")}`);

@@ -7,12 +7,12 @@ export async function listCommand(root: string): Promise<void> {
     return;
   }
   console.log(
-    `${"date".padEnd(10)} ${"company".padEnd(12)} ${"role".padEnd(24)} ${"trk".padEnd(3)} ${"rg".padEnd(2)} ${"csv".padEnd(7)} ${"job".padEnd(7)} ${"pdf".padEnd(7)}`,
+    `${"date".padEnd(10)} ${"company".padEnd(12)} ${"role".padEnd(24)} ${"track".padEnd(5)} ${"region".padEnd(6)} ${"status".padEnd(12)} ${"job".padEnd(12)} ${"pdf".padEnd(7)}`,
   );
   for (const r of rows) {
     console.log(
       `${r.date.padEnd(10)} ${r.company.slice(0, 12).padEnd(12)} ${r.role.slice(0, 24).padEnd(24)} ` +
-        `${r.track.padEnd(3)} ${r.region.padEnd(2)} ${r.status.padEnd(7)} ${r.jobStatus.padEnd(7)} ${r.pdf.padEnd(7)}`,
+        `${r.track.padEnd(5)} ${r.region.padEnd(6)} ${r.status.padEnd(12)} ${r.jobStatus.padEnd(12)} ${r.pdf.padEnd(7)}`,
     );
   }
   if (warnings.length > 0) {

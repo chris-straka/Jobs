@@ -57,6 +57,13 @@ describe("ja", () => {
     expect(full.out.length).toBeGreaterThan(bare.out.length);
   });
 
+  it("explains status with an example", () => {
+    const r = run("status", "--help");
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("ja status applications/");
+    expect(r.out).toContain("interviewing");
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);
