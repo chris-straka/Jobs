@@ -50,7 +50,7 @@ Usage: ja [--root DIR] <command> [args]   (default root: $REPO_ROOT or cwd)
       start the local capture server, loopback only (default port: $PORT or 8765)
   probe
       verify the model wiring with a tiny completion
-  extension [--out DIR]
+  extension [--out DIR] [--watch]
       rebuild + copy a load-ready extension folder to ~/Downloads
 
 Run from the repo root, or pass --root. ja <command> --help for detail.`;

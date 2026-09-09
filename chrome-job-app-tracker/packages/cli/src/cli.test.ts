@@ -192,6 +192,36 @@ describe("ja", () => {
     }
   });
 
+  it("stays up in watch mode and exports", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { spawn } = await import("node:child_process");
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-extw-"));
+    const out = path.join(dir, "out");
+    try {
+      const child = spawn(
+        "bun",
+        [entry, "--root", trackerRoot, "extension", "--out", out, "--watch"],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      try {
+        const deadline = Date.now() + 30000;
+        while (!existsSync(path.join(out, "manifest.json"))) {
+          if (Date.now() > deadline) throw new Error("watch mode never exported");
+          if (child.exitCode !== null) throw new Error(`watch mode exited: ${child.exitCode}`);
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        expect(existsSync(path.join(out, "dist", "popup.js"))).toBe(true);
+      } finally {
+        child.kill();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);
