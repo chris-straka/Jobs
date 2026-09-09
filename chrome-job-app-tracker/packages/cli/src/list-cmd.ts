@@ -13,13 +13,16 @@ Default: every application. --status filters to one stage:
 
 const ANSI: Record<string, string> = {
   reset: "\x1b[0m",
-  bold: "\x1b[1m",
+  dim: "\x1b[2m",
   red: "\x1b[31m",
   green: "\x1b[32m",
   yellow: "\x1b[33m",
   cyan: "\x1b[36m",
   gray: "\x1b[90m",
 };
+
+/** Column widths shared by the header, the rule, and every row. */
+const COLS = [10, 12, 24, 5, 6, 12, 12, 7];
 
 /** Color only on a real terminal that hasn't opted out — piped output stays plain. */
 function paint(text: string, color: string): string {
@@ -76,20 +79,28 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
     console.log(stage ? `no ${stage} applications` : "no applications yet — nothing tracked");
     return;
   }
-  console.log(
-    paint(
-      `${"date".padEnd(10)} ${"company".padEnd(12)} ${"role".padEnd(24)} ${"track".padEnd(5)} ${"region".padEnd(6)} ${"status".padEnd(12)} ${"job".padEnd(12)} ${"pdf".padEnd(7)}`,
-      "bold",
-    ),
-  );
+  // Dim, never bold: bold glyphs render wider in most terminal fonts, which
+  // drifts the header right of its column. Paint after padding — padding a
+  // string that already holds escape codes would under-pad it.
+  const pad = (cells: string[]): string[] => cells.map((c, i) => c.padEnd(COLS[i]));
+  const head = pad(["date", "company", "role", "track", "region", "status", "job", "pdf"]);
+  console.log(paint(head.join(" "), "dim"));
+  console.log(paint("─".repeat(head.join(" ").length), "dim"));
   for (const r of shown) {
-    console.log(
-      `${r.date.padEnd(10)} ${r.company.slice(0, 12).padEnd(12)} ${r.role.slice(0, 24).padEnd(24)} ` +
-        `${r.track.padEnd(5)} ${r.region.padEnd(6)}` +
-        `${paint(r.status.padEnd(12), stageColor(r.status))}` +
-        `${paint(r.jobStatus.padEnd(12), stageColor(r.jobStatus))}` +
-        `${paint(r.pdf.padEnd(7), pdfColor(r.pdf))}`,
-    );
+    const cells = pad([
+      r.date,
+      r.company.slice(0, 12),
+      r.role.slice(0, 24),
+      r.track,
+      r.region,
+      r.status,
+      r.jobStatus,
+      r.pdf,
+    ]);
+    cells[5] = paint(cells[5], stageColor(r.status));
+    cells[6] = paint(cells[6], stageColor(r.jobStatus));
+    cells[7] = paint(cells[7], pdfColor(r.pdf));
+    console.log(cells.join(" "));
   }
   const relevant = stage
     ? warnings.filter((w) => shown.some((r) => w.startsWith(`${r.folder}:`)))
