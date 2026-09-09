@@ -3,10 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
+    "probe": "bun src/probe.ts",
     "test": "bun test"
   },
   "dependencies": {

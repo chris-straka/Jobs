@@ -1,0 +1,19 @@
+{
+  "name": "@jat/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "job-app": "src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test src",
+    "install-global": "./install.sh"
+  },
+  "dependencies": {
+    "@jat/core": "^0.1.0",
+    "@jat/server": "^0.1.0",
+    "@jat/shared": "^0.1.0"
+  }
+}
