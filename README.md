@@ -7,20 +7,27 @@ compiled from a shared bullet library so you edit facts in one place.
 
 ```bash
 brew install typst
+chrome-job-app-tracker/packages/cli/install.sh   # compiles job-app to ~/.local/bin
 ```
+
+`job-app --help` lists everything; one command, subcommands below.
 
 ## Every application
 
 ```bash
 # 1. paste the job URL; it prompts for the rest, then for the description
 #    (paste it, Ctrl-D). Company is guessed from the URL.
-add-job https://example.com/jobs/quality-engineer-123
+job-app add https://example.com/jobs/quality-engineer-123
 
 # 2. tailor it (in your editor, with Claude Code or Codex):
 claude "tailor applications/2026-09-02_example-co_quality-engineer to job.md"
 
 # 3. compile + verify it's still one page:
-bin/build.sh applications/2026-09-02_example-co_quality-engineer
+job-app build applications/2026-09-02_example-co_quality-engineer
+
+# later: check the tracker, move status (csv + job.md together)
+job-app list
+job-app status applications/2026-09-02_example-co_quality-engineer applied
 ```
 
 `typst watch --root . applications/<dir>/resume.typ` gives a live preview while
@@ -35,8 +42,8 @@ you edit.
 - `templates/lib.typ` — the renderer. All layout lives here.
 - `applications/` — the archive. `job.md` is the posting verbatim, `chris-straka-resume.pdf`
   is exactly what you sent.
-- `applications.csv` — the tracker. `bin/list` shows it with pdf + status checks;
-  `bin/status <folder> <new-status>` moves an application (csv + job.md together).
+- `applications.csv` — the tracker. `job-app list` shows it with pdf + status checks;
+  `job-app status` moves an application (csv + job.md together).
 - `chrome-job-app-tracker/` — optional click-to-capture companion (MV3 extension
   + local Bun server). Same folders out the other end; see its README.
 - `docs/` — source material only (project write-ups, course notes, job-board

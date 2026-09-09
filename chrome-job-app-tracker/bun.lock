@@ -14,6 +14,30 @@
         "typescript-eslint": "^8.19.1",
       },
     },
+    "packages/cli": {
+      "name": "@jat/cli",
+      "version": "0.1.0",
+      "bin": {
+        "job-app": "src/index.ts",
+      },
+      "dependencies": {
+        "@jat/core": "^0.1.0",
+        "@jat/server": "^0.1.0",
+        "@jat/shared": "^0.1.0",
+      },
+    },
+    "packages/core": {
+      "name": "@jat/core",
+      "version": "0.1.0",
+      "dependencies": {
+        "@jat/shared": "^0.1.0",
+        "js-yaml": "^4.1.0",
+        "zod": "^3.24.1",
+      },
+      "devDependencies": {
+        "@types/js-yaml": "^4.0.9",
+      },
+    },
     "packages/extension": {
       "name": "@jat/extension",
       "version": "0.1.0",
@@ -26,16 +50,16 @@
         "@types/chrome": "^0.0.280",
       },
     },
+    "packages/native-host": {
+      "name": "@jat/native-host",
+      "version": "0.1.0",
+    },
     "packages/server": {
       "name": "@jat/server",
       "version": "0.1.0",
       "dependencies": {
+        "@jat/core": "^0.1.0",
         "@jat/shared": "^0.1.0",
-        "js-yaml": "^4.1.0",
-        "zod": "^3.24.1",
-      },
-      "devDependencies": {
-        "@types/js-yaml": "^4.0.9",
       },
     },
     "packages/shared": {
@@ -75,7 +99,13 @@
 
     "@humanwhocodes/retry": ["@humanwhocodes/retry@0.4.3", "", {}, "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ=="],
 
+    "@jat/cli": ["@jat/cli@workspace:packages/cli"],
+
+    "@jat/core": ["@jat/core@workspace:packages/core"],
+
     "@jat/extension": ["@jat/extension@workspace:packages/extension"],
+
+    "@jat/native-host": ["@jat/native-host@workspace:packages/native-host"],
 
     "@jat/server": ["@jat/server@workspace:packages/server"],
 

@@ -2,7 +2,7 @@
 # Compile job-app to a standalone binary and link it onto PATH.
 set -euo pipefail
 
-PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${OUT:-$HOME/.local/bin/job-app}"
 
 bun build --compile "$PKG_DIR/src/index.ts" --outfile "$OUT"

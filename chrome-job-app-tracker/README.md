@@ -3,23 +3,34 @@
 Click-to-capture companion for the Jobs repo. On a job posting, open the
 popup, confirm the fields, hit Save: the posting lands as a new
 `applications/YYYY-MM-DD_company_role/` folder with a fit report, exactly as
-if you had pasted it into `add-job` yourself.
+if you had run `job-app add` yourself.
+
+All repo operations live in `packages/core/` (`@jat/core`): the `job-app` CLI,
+the server, and the tests all call it. Install the CLI once with
+`packages/cli/install.sh` (compiles `job-app` to `~/.local/bin`), then
+`job-app --help` is the whole manual.
 
 Two parts, one thin and one doing the work:
 
 - `packages/extension/` — Manifest V3 extension. A content script extracts the
-  posting text from the visible tab; the popup (company, role, track, region,
+  posting text from the visible tab, shows a "Save this job?" pill on likely
+  postings (with a "Not a posting" button feeding a per-host ignore list), and
+  watches apply-button clicks to offer one-click "Mark applied". A background
+  worker relays those to the server. The popup (company, role, track, region,
   server URL, editable description) validates with Zod and POSTs to the local
-  server. It cannot write files — browsers don't allow that.
+  server, and shows a server health dot. Nothing in the browser writes files —
+  browsers don't allow that.
 - `packages/server/` — local Bun server (default `http://127.0.0.1:8765`).
-  Validates the capture, scaffolds via `bin/add-job` (the same script a human
-  runs — single source of truth), runs a deterministic fit analysis against
-  `content/projects.yml`, verifies the starter resume with `bin/build.sh`,
-  and optionally asks a model for a summary draft + bullet picks.
-- `packages/shared/` — Zod schemas, keyword scoring, and `analyzeFit`,
-  imported by both.
+  Validates the capture, scaffolds via `@jat/core` (the same code `job-app`
+  runs), runs a deterministic fit analysis against `content/projects.yml`,
+  verifies the starter resume build, and optionally asks a model for a
+  summary draft + bullet picks.
+- `packages/shared/` — Zod schemas, keyword scoring, `analyzeFit`, URL helpers,
+  imported by everyone.
+- `packages/native-host/` — optional one-click server start/stop from the
+  popup (see below).
 
-The human gate stays: the server drafts, you confirm. `build.sh` still
+The human gate stays: the server drafts, you confirm. The build still
 enforces one page and no TODO bullets, and suggested bullet ids are filtered
 against the library in code — unknown ids are dropped, so the model cannot
 invent experience into a factual document.
@@ -58,15 +69,32 @@ repo (asserting the folder, `job.md`, and CSV row).
 
 ## Configuration
 
-| Env             | Default                 | Meaning                                             |
-| --------------- | ----------------------- | --------------------------------------------------- |
-| `PORT`          | `8765`                  | server listen port                                  |
-| `REPO_ROOT`     | parent of this checkout | Jobs repo to write into (tests override)            |
-| `MODEL_API_URL` | — (model step disabled) | OpenAI-compatible base URL                          |
-| `MODEL_API_KEY` | —                       | bearer key, stays server-side, never in the browser |
-| `MODEL_NAME`    | —                       | model id for `/chat/completions`                    |
+| Env             | Default                      | Meaning                                                                                                                              |
+| --------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`          | `8765`                       | server listen port                                                                                                                   |
+| `REPO_ROOT`     | parent of this checkout      | Jobs repo to write into (tests override)                                                                                             |
+| `MODEL_API_URL` | — (model step disabled)      | OpenAI-compatible base URL (`META_BASE_URL` also accepted)                                                                           |
+| `MODEL_API_KEY` | —                            | bearer key, stays server-side, never in the browser (`META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE`, `META_API_KEY` also accepted) |
+| `MODEL_NAME`    | `muse-spark-1.3-contributor` | model id for `/chat/completions`                                                                                                     |
 
-Endpoints: `GET /health`, `POST /api/capture` (see `CaptureRequest` in
+Put secrets in `chrome-job-app-tracker/.env` (git-ignored, loaded explicitly at
+startup regardless of working directory). `bun run --filter @jat/server probe`
+sends a tiny completion to verify the wiring without printing the key.
+
+The server runs on demand, not at login: start it while hunting, stop it after.
+The popup shows a health dot plus copy buttons for both commands (the start
+command is built from the repo root the server reports, so it stays correct).
+Set `JAT_AUTO_DRAFT=1` to also write a tailored `resume.typ` draft on capture —
+off by default, and still library-filtered, so review before sending.
+
+One-click start/stop (optional): `packages/native-host/install.sh --id <id>`
+registers this checkout as Chrome's native-messaging host (find the id at
+`chrome://extensions` with Developer mode on). The popup then shows Start/Stop
+buttons and hides them again if the host is missing — copy buttons are always
+the fallback. `install.sh uninstall` removes it.
+
+Endpoints: `GET /health`, `POST /api/capture`, `GET /api/resolve?url=…`,
+`POST /api/status` (see `CaptureRequest`/`StatusRequest` in
 `packages/shared/src/schemas.ts`).
 
 ## Fair-use note

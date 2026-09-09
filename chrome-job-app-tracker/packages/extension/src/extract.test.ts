@@ -53,4 +53,3 @@ describe("isDenied", () => {
     expect(isDenied("x.com", [])).toBe(false);
   });
 });
-

@@ -6,10 +6,22 @@ export interface ModelConfig {
   model: string;
 }
 
+/**
+ * @returns the model configuration when URL, key, and model are all set;
+ * `null` (model step disabled) otherwise
+ */
+/**
+ * Accepts the canonical `MODEL_*` names plus the `META_*` aliases, so an
+ * existing Meta-flavored `.env` works untouched. The model defaults to
+ * `muse-spark-1.3-contributor` when URL + key are present but no name is set.
+ */
 export function modelConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ModelConfig | null {
-  const { MODEL_API_URL, MODEL_API_KEY, MODEL_NAME } = env;
-  if (!MODEL_API_URL || !MODEL_API_KEY || !MODEL_NAME) return null;
-  return { url: MODEL_API_URL, key: MODEL_API_KEY, model: MODEL_NAME };
+  const url = env.MODEL_API_URL ?? env.META_BASE_URL;
+  const key =
+    env.MODEL_API_KEY ?? env.META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE ?? env.META_API_KEY;
+  const model = env.MODEL_NAME ?? "muse-spark-1.3-contributor";
+  if (!url || !key) return null;
+  return { url, key, model };
 }
 
 const disabled = (): ModelSuggestion => ({

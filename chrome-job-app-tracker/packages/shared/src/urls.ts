@@ -81,7 +81,13 @@ export function guessCompany(rawUrl: string): string {
   const useful = (s: string): boolean => !GENERIC.has(s) && !isId(s);
 
   if (PATH_ATS.test(host)) return segs.find(useful) ?? "";
-  if (HOST_ATS.test(host)) return host.split(".").map(slug).find((s) => !GENERIC.has(s)) ?? "";
+  if (HOST_ATS.test(host))
+    return (
+      host
+        .split(".")
+        .map(slug)
+        .find((s) => !GENERIC.has(s)) ?? ""
+    );
   if (AGGREGATORS.test(host)) return "";
   const rest = host
     .split(".")

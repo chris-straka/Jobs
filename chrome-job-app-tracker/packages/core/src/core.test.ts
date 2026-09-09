@@ -44,7 +44,9 @@ describe("csv", () => {
       url: "https://example.com/jobs/1",
       folder: "applications/2026-09-09_acme-inc_backend-engineer",
     };
-    const { rows } = parseCsv(`date,company,role,track,region,status,url,folder\n${formatRow(row)}\n`);
+    const { rows } = parseCsv(
+      `date,company,role,track,region,status,url,folder\n${formatRow(row)}\n`,
+    );
     expect(rows).toEqual([row]);
   });
 });
@@ -55,7 +57,7 @@ describe("addApplication", () => {
     const { folder } = addApplication(root, INPUT, "2026-09-09");
     expect(folder).toBe("applications/2026-09-09_acme-inc_backend-engineer");
     const job = await readFile(path.join(root, folder, "job.md"), "utf8");
-    expect(job).toContain('status: draft');
+    expect(job).toContain("status: draft");
     expect(job).toContain(`url: "${INPUT.url}"`);
     expect(job).toContain(INPUT.description);
     const typ = await readFile(path.join(root, folder, "resume.typ"), "utf8");
@@ -86,9 +88,9 @@ describe("setApplicationStatus", () => {
     const jobBefore = await readFile(path.join(root, folder, "job.md"), "utf8");
     const csvBefore = await readFile(path.join(root, "applications.csv"), "utf8");
     expect(setApplicationStatus(root, folder, "applied")).toEqual({ old: "draft" });
-    expect((await readFile(path.join(root, folder, "job.md"), "utf8")).includes("status: applied")).toBe(
-      true,
-    );
+    expect(
+      (await readFile(path.join(root, folder, "job.md"), "utf8")).includes("status: applied"),
+    ).toBe(true);
     expect(setApplicationStatus(root, folder, "draft")).toEqual({ old: "applied" });
     expect(await readFile(path.join(root, folder, "job.md"), "utf8")).toBe(jobBefore);
     expect(await readFile(path.join(root, "applications.csv"), "utf8")).toBe(csvBefore);
@@ -96,7 +98,9 @@ describe("setApplicationStatus", () => {
 
   it("fails on unknown folders", async () => {
     const root = await mkRoot();
-    expect(() => setApplicationStatus(root, "applications/nope", "applied")).toThrow("no such folder");
+    expect(() => setApplicationStatus(root, "applications/nope", "applied")).toThrow(
+      "no such folder",
+    );
   });
 });
 
@@ -139,7 +143,7 @@ describe("buildResumes", () => {
     await writeFile(typ, '(id: "telemetry", bullets: ("gitops"))\n');
     const todo = clean();
     expect(todo.ok).toBe(false);
-    expect(todo.lines.join("\n")).toContain('TODO');
+    expect(todo.lines.join("\n")).toContain("TODO");
     expect(todo.lines.join("\n")).toContain("gitops");
 
     await writeFile(typ, "plain\n");

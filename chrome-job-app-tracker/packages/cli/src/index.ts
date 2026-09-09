@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { allResumes, buildResumes } from "@jat/core";
 import { AppStatus } from "@jat/shared";
-import { addCommand, addHelp } from "./add.js";
+import { addCommand } from "./add.js";
 import { listCommand } from "./list-cmd.js";
 import { statusCommand } from "./status-cmd.js";
 import { serverCommand } from "./server-cmd.js";

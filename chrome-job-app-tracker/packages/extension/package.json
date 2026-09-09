@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/content.ts src/popup.ts --outdir=dist --format=iife --minify",
+    "build": "bun build src/content.ts src/popup.ts src/background.ts --outdir=dist --format=iife --minify",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test src",
     "e2e": "bun run build && playwright test"

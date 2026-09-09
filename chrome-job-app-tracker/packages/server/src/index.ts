@@ -11,12 +11,16 @@ import {
   analyzeFit,
 } from "@jat/shared";
 import { loadTrackerEnv, repoRoot, serverPort } from "./repo.js";
-import { loadLibrary } from "./library.js";
 
 export { runProbe } from "./probe.js";
-import { scaffold, verifyBuild } from "./capture.js";
+import {
+  addApplication,
+  buildResumes,
+  findByUrl,
+  loadLibrary,
+  setApplicationStatus,
+} from "@jat/core";
 import { autoDraftEnabled, buildResumeTyp } from "./draft.js";
-import { resolveByUrl, setStatus } from "./status.js";
 import { suggest } from "./model.js";
 
 const BODY_LIMIT = 2 * 1024 * 1024;
@@ -54,10 +58,10 @@ function json(res: http.ServerResponse, status: number, value: unknown): void {
  * Starts the capture service on loopback only (never exposed to the LAN).
  *
  * Routes: `GET /health`, `POST /api/capture` (Zod-validated), `OPTIONS`
- * preflight. A capture scaffolds via `bin/add-job`, scores fit against the
- * bullet library, verifies with `bin/build.sh`, and optionally asks the
- * model. Failures surface as 400 (bad payload) or 500 (scaffold failed);
- * nothing is ever written except through `bin/add-job`.
+ * preflight, plus resolve/status. A capture scaffolds via `@jat/core`
+ * (the same code `job-app` runs), scores fit against the bullet library,
+ * verifies the build, and optionally asks the model. Failures surface as
+ * 400 (bad payload) or 500 (scaffold failed).
  */
 export function startServer(opts: { port?: number; root?: string } = {}): http.Server {
   const root = opts.root ?? repoRoot();
@@ -73,7 +77,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
       }
       if (req.method === "GET" && req.url?.startsWith("/api/resolve")) {
         const u = new URL(req.url, "http://127.0.0.1").searchParams.get("url") ?? "";
-        json(res, 200, ResolveResponse.parse({ folder: await resolveByUrl(root, u) }));
+        json(res, 200, ResolveResponse.parse({ folder: findByUrl(root, u) }));
         return;
       }
       if (req.method === "POST" && req.url === "/api/status") {
@@ -89,9 +93,10 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           json(res, 400, { error: "invalid status change", issues: parsed.error.issues });
           return;
         }
-        const r = setStatus(root, parsed.data.folder, parsed.data.status);
-        if (!r.ok) {
-          json(res, 500, { error: r.output });
+        try {
+          setApplicationStatus(root, parsed.data.folder, parsed.data.status);
+        } catch (err) {
+          json(res, 500, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
         json(res, 200, StatusResponse.parse(parsed.data));
@@ -111,10 +116,10 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           return;
         }
         try {
-          const { folder } = scaffold(root, parsed.data);
-          const library = await loadLibrary(root);
+          const { folder } = addApplication(root, parsed.data);
+          const library = loadLibrary(root);
           const fit = analyzeFit(parsed.data.description, library);
-          let build = verifyBuild(root, folder);
+          let build = buildResumes(root, [folder]);
           const model = await suggest(parsed.data.description, library);
           const draft = { written: false, summary: null as string | null };
           if (autoDraftEnabled() && !model.disabled && model.summary && model.bullets.length > 0) {
@@ -129,7 +134,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
                   fitOrder: fit.projects.map((p) => p.id),
                 }),
               );
-              build = verifyBuild(root, folder);
+              build = buildResumes(root, [folder]);
               draft.written = true;
               draft.summary = model.summary;
             } catch {
@@ -142,7 +147,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
             CaptureResponse.parse({
               folder,
               buildOk: build.ok,
-              buildOutput: build.output,
+              buildOutput: build.lines.join("\n"),
               fit,
               model,
               draft,

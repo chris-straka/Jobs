@@ -1,11 +1,4 @@
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { appFolder } from "@jat/shared";
 import { CSV_HEADER, formatRow, type AppRow } from "./csv.js";
@@ -29,7 +22,11 @@ function resumeTyp(track: string, region: string): string {
   return `#import "../../templates/lib.typ": resume\n\n#resume(\n  track: "${track}",\n  region: "${region}",\n)\n`;
 }
 
-function jobMd(input: Required<Pick<AddInput, "company" | "role" | "track" | "region" | "url">>, date: string, description: string): string {
+function jobMd(
+  input: Required<Pick<AddInput, "company" | "role" | "track" | "region" | "url">>,
+  date: string,
+  description: string,
+): string {
   return `---\ncompany: "${input.company}"\nrole: "${input.role}"\ntrack: ${input.track}\nregion: ${input.region}\nurl: "${input.url}"\nsaved: ${date}\nstatus: draft\n---\n\n${description}\n`;
 }
 
@@ -58,10 +55,12 @@ export function addApplication(
   if (!url) throw new Error("Job URL is required");
   if (!company) throw new Error("Company is required");
   if (!role) throw new Error("Role title is required");
-  if (track !== "swe" && track !== "csa") throw new Error(`track must be 'swe' or 'csa' (got '${track}')`);
+  if (track !== "swe" && track !== "csa")
+    throw new Error(`track must be 'swe' or 'csa' (got '${track}')`);
   if (region !== "us" && region !== "ca" && region !== "uk")
     throw new Error(`region must be us, ca or uk (got '${region}')`);
-  if (!description || !description.trim()) throw new Error("job description was empty — nothing saved");
+  if (!description || !description.trim())
+    throw new Error("job description was empty — nothing saved");
 
   const folder = `applications/${appFolder(date, company, role)}`;
   const dir = path.join(root, folder);

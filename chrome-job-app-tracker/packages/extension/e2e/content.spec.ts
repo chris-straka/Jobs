@@ -16,6 +16,17 @@ interface PostingResponse {
 test("content script extracts the posting from the real bundle", async ({ page }) => {
   await page.addInitScript(() => {
     const listeners: MessageListener[] = [];
+    const store: Record<string, unknown> = {};
+    // Stands in for background.ts: records FP reports like the real hub does.
+    const fakeBackground = (msg: { type?: string; host?: string }): unknown => {
+      if (msg?.type === "JAT_FP_REPORT" && msg.host) {
+        const hosts = Array.isArray(store["fpHosts"]) ? store["fpHosts"] : [];
+        if (!(hosts as string[]).includes(msg.host)) {
+          store["fpHosts"] = [...(hosts as string[]), msg.host];
+        }
+      }
+      return { ok: true };
+    };
     const fakeChrome = {
       runtime: {
         onMessage: {
@@ -23,11 +34,27 @@ test("content script extracts the posting from the real bundle", async ({ page }
             listeners.push(fn);
           },
         },
+        sendMessage: (msg: { type?: string; host?: string }): Promise<unknown> =>
+          Promise.resolve(fakeBackground(msg)),
+      },
+      storage: {
+        local: {
+          get: (keys: string[]): Promise<Record<string, unknown>> =>
+            Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+          set: (obj: Record<string, unknown>): Promise<void> => {
+            Object.assign(store, obj);
+            return Promise.resolve();
+          },
+        },
       },
     };
-    (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
-    (window as unknown as FakeWindow & { __jatListeners?: MessageListener[] }).__jatListeners =
-      listeners;
+    const w = window as unknown as { chrome?: unknown } & FakeWindow & {
+        __jatListeners?: MessageListener[];
+        __jatStore?: Record<string, unknown>;
+      };
+    w.chrome = fakeChrome;
+    w.__jatListeners = listeners;
+    w.__jatStore = store;
   });
 
   const site = await startStatic(pkgDir);
@@ -50,6 +77,18 @@ test("content script extracts the posting from the real bundle", async ({ page }
     // Article-only word: proves it picked the posting, not nav/footer.
     expect(result.posting?.description).toContain("exactly-once");
     expect(result.posting?.description?.length).toBeGreaterThan(500);
+
+    // Auto-pill fired (apply button + substance) with reasons shown.
+    await expect(page.locator("#jat-pill")).toContainText("Save this job?");
+    await expect(page.locator("#jat-pill")).toContainText("apply button");
+
+    // "Not a posting" hides the pill and records this host.
+    await page.locator("#jat-pill button[data-act='no']").click();
+    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    const store = await page.evaluate(
+      () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
+    );
+    expect(store["fpHosts"]).toContain("127.0.0.1");
   } finally {
     site.close();
   }

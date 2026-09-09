@@ -15,18 +15,23 @@ content/         master bullet library — single source of truth,
 templates/       lib.typ — the renderer, all layout lives here
 applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, chris-straka-resume.pdf, notes.md
 applications.csv tracker
-bin/             add-job (scaffold), build.sh (compile + page check),
-                 list (tracker + drift check), status (move csv + job.md together)
-chrome-job-app-tracker/  optional MV3 extension + local server; captures into the
-                 same folders via bin/add-job — never edit scaffolding in two places
+chrome-job-app-tracker/  the tooling: job-app CLI + @jat/core (the one
+                 implementation of add/build/list/status), local server,
+                 MV3 extension, native-messaging host
 ```
+
+One implementation: `@jat/core` (add/build/list/status). The `job-app` CLI,
+the server, and the tests all call it — never reimplement an operation,
+never shell out to a duplicate.
 
 ## Commands
 
 ```bash
-add-job https://posting            # prompts for the rest
-bin/build.sh applications/2026-09-02_company_role   # one
-bin/build.sh                                        # everything
+job-app add https://posting            # prompts for the rest
+job-app build applications/2026-09-02_company_role   # one
+job-app build                                        # everything
+job-app list                                         # tracker + drift check
+job-app status <folder> applied                      # csv + job.md together
 typst watch --root . applications/<dir>/resume.typ  # live preview while editing
 ```
 
@@ -49,7 +54,7 @@ When asked to tailor an application:
    - `projects:` — defaults to the track's list in `content/defaults.yml`.
      Write an explicit list in `resume.typ` to reorder so the project answering
      the posting's hardest requirement is first, with `bullets:` ids that match.
-4. Run `bin/build.sh <dir>`. It fails if the PDF is more than one page.
+4. Run `job-app build <dir>`. It fails if the PDF is more than one page.
 5. Report which bullets you swapped in and why.
 
 ## Hard rules

@@ -31,6 +31,9 @@
         display: flex;
         gap: 8px;
       }
+      .row[hidden] {
+        display: none;
+      }
       .row > div {
         flex: 1;
       }
@@ -49,6 +52,15 @@
     </style>
   </head>
   <body>
+    <div id="health">● checking server…</div>
+    <div class="row" id="native-row" hidden>
+      <div><button id="srv-start" type="button">Start server</button></div>
+      <div><button id="srv-stop" type="button">Stop server</button></div>
+    </div>
+    <div class="row">
+      <div><button id="copy-start" type="button">Copy start cmd</button></div>
+      <div><button id="copy-stop" type="button">Copy stop cmd</button></div>
+    </div>
     <label for="company">Company</label>
     <input id="company" />
     <label for="role">Role title</label>
@@ -75,7 +87,12 @@
     <label for="description">Posting text <span id="count"></span></label>
     <textarea id="description"></textarea>
     <button id="save" type="button">Save to Jobs repo</button>
+    <button id="mark-applied" type="button">Mark applied ✓</button>
     <div id="status"></div>
+    <details id="fp-wrap">
+      <summary>Ignored sites (<span id="fp-count">0</span>)</summary>
+      <ul id="fp-list"></ul>
+    </details>
     <script src="dist/popup.js"></script>
   </body>
 </html>

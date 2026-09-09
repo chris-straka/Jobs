@@ -16,11 +16,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@jat/shared": "^0.1.0",
-    "js-yaml": "^4.1.0",
-    "zod": "^3.24.1"
-  },
-  "devDependencies": {
-    "@types/js-yaml": "^4.0.9"
+    "@jat/core": "^0.1.0",
+    "@jat/shared": "^0.1.0"
   }
 }

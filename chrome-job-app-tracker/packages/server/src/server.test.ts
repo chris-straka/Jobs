@@ -1,10 +1,15 @@
-import { afterAll, describe, expect, it } from "bun:test";
-import { chmod, cp, copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  addApplication,
+  buildResumes,
+  findByUrl,
+  loadLibrary,
+  setApplicationStatus,
+} from "@jat/core";
 import { repoRoot } from "./repo.js";
-import { loadLibrary } from "./library.js";
-import { scaffold, verifyBuild } from "./capture.js";
 import { modelConfigFromEnv, suggest } from "./model.js";
 import { startServer } from "./index.js";
 
@@ -14,20 +19,40 @@ const JD =
   "Postgres, gRPC. ".repeat(10);
 
 const fixtures: string[] = [];
+
+// Model credential names the suite must never see: a developer `.env` may
+// exist on disk, and the HTTP e2e calls suggest() with live config.
+const SECRET_KEYS = [
+  "MODEL_API_URL",
+  "MODEL_API_KEY",
+  "MODEL_NAME",
+  "META_BASE_URL",
+  "META_API_KEY",
+  "META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE",
+  "JAT_AUTO_DRAFT",
+];
+const savedEnv = new Map<string, string | undefined>();
+beforeAll(() => {
+  for (const k of SECRET_KEYS) {
+    savedEnv.set(k, process.env[k]);
+    delete process.env[k];
+  }
+});
 afterAll(async () => {
+  for (const k of SECRET_KEYS) {
+    const v = savedEnv.get(k);
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
   await Promise.all(fixtures.map((d) => rm(d, { recursive: true, force: true })));
 });
 
-/** Temp repo: real add-job/build.sh (copied — they resolve ROOT from $0),
- *  content + templates copied (Typst will not follow symlinks outside --root). */
+/** Temp repo: content + templates copied (Typst will not follow symlinks
+ *  outside --root). No scripts needed — @jat/core operates in-process. */
 async function mkFixture(): Promise<string> {
   const tmp = await mkdtemp(path.join(tmpdir(), "jat-"));
   fixtures.push(tmp);
-  await mkdir(path.join(tmp, "bin"), { recursive: true });
-  for (const f of ["add-job", "build.sh"]) {
-    await copyFile(path.join(REAL_ROOT, "bin", f), path.join(tmp, "bin", f));
-    await chmod(path.join(tmp, "bin", f), 0o755);
-  }
+  await mkdir(path.join(tmp, "applications"), { recursive: true });
   await cp(path.join(REAL_ROOT, "content"), path.join(tmp, "content"), { recursive: true });
   await cp(path.join(REAL_ROOT, "templates"), path.join(tmp, "templates"), { recursive: true });
   return tmp;
@@ -43,37 +68,120 @@ async function exists(p: string): Promise<boolean> {
 }
 
 describe("loadLibrary", () => {
-  it("parses the real bullet library", async () => {
-    const lib = await loadLibrary(REAL_ROOT);
+  it("parses the real bullet library", () => {
+    const lib = loadLibrary(REAL_ROOT);
     const telemetry = lib.find((p) => p.id === "telemetry");
     expect(telemetry).toBeDefined();
     expect(telemetry!.bullets.length).toBeGreaterThan(5);
   });
 });
 
-describe("verifyBuild", () => {
-  it("passes through a stub runner with an absolute folder", () => {
-    const seen: string[][] = [];
-    const run = (cmd: string, args: string[]) => {
-      seen.push([cmd, ...args]);
-      return { status: 0, stdout: "ok" };
-    };
-    expect(verifyBuild("/r", "applications/x", run).ok).toBe(true);
-    expect(seen).toEqual([["/r/bin/build.sh", "/r/applications/x"]]);
-    expect(verifyBuild("/r", "applications/x", () => ({ status: 1, stdout: "boom" }))).toEqual({
-      ok: false,
-      output: "boom",
+describe("build wiring", () => {
+  it("resolves folders against the repo root", async () => {
+    const tmp = await mkFixture();
+    const { folder } = addApplication(tmp, {
+      url: "https://example.com/jobs/98",
+      company: "Acme",
+      role: "Backend Engineer",
+      track: "swe",
+      region: "uk",
+      description: JD,
     });
+    await writeFile(path.join(tmp, folder, "chris-straka-resume.pdf"), "fake /Count 1 pdf");
+    const seen: string[][] = [];
+    const r = buildResumes(tmp, [folder], (cmd, args) => {
+      seen.push([cmd, ...args]);
+      return { status: 0, output: "ok" };
+    });
+    expect(r.ok).toBe(true);
+    expect(seen[0][0]).toBe("typst");
+    expect(seen[0]).toContain(path.join(tmp, folder, "resume.typ"));
   });
 });
 
 describe("model", () => {
   it("is disabled without env config and never calls the network", async () => {
     expect(modelConfigFromEnv({})).toBeNull();
-    const lib = await loadLibrary(REAL_ROOT);
+    const lib = loadLibrary(REAL_ROOT);
     const s = await suggest(JD, lib, null);
     expect(s).toEqual({ disabled: true, summary: null, bullets: [], gaps: [], raw: null });
   });
+
+  it("accepts META_* aliases and defaults the contributor model", () => {
+    expect(
+      modelConfigFromEnv({
+        META_BASE_URL: "https://api.meta.ai/v1",
+        META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE: "k",
+      }),
+    ).toEqual({
+      url: "https://api.meta.ai/v1",
+      key: "k",
+      model: "muse-spark-1.3-contributor",
+    });
+    expect(modelConfigFromEnv({ MODEL_API_URL: "u", MODEL_API_KEY: "k", MODEL_NAME: "m" })).toEqual(
+      { url: "u", key: "k", model: "m" },
+    );
+  });
+});
+
+describe("resolve + status", () => {
+  it("finds a captured URL and moves it to applied", async () => {
+    const tmp = await mkFixture();
+    const req = {
+      url: "https://example.com/jobs/99",
+      company: "Acme",
+      role: "Backend Engineer",
+      track: "swe" as const,
+      region: "uk" as const,
+      description: JD,
+    };
+    const { folder } = addApplication(tmp, req);
+    expect(findByUrl(tmp, "https://example.com/jobs/99")).toBe(folder);
+    expect(findByUrl(tmp, "https://example.com/jobs/unknown")).toBeNull();
+
+    expect(setApplicationStatus(tmp, folder, "applied")).toEqual({ old: "draft" });
+    const job = await readFile(path.join(tmp, folder, "job.md"), "utf8");
+    expect(job).toContain("status: applied");
+    const csv = await readFile(path.join(tmp, "applications.csv"), "utf8");
+    expect(csv).toContain('"applied"');
+  });
+
+  it("moves status over HTTP", async () => {
+    const tmp = await mkFixture();
+    const { folder } = addApplication(tmp, {
+      url: "https://example.com/jobs/100",
+      company: "Acme",
+      role: "Backend Engineer",
+      track: "swe" as const,
+      region: "uk" as const,
+      description: JD,
+    });
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      const resolved = await (
+        await fetch(`${base}/api/resolve?url=${encodeURIComponent("https://example.com/jobs/100")}`)
+      ).json();
+      expect(resolved).toEqual({ folder });
+      const changed = await fetch(`${base}/api/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ folder, status: "applied" }),
+      });
+      expect(changed.status).toBe(200);
+      expect(await changed.json()).toEqual({ folder, status: "applied" });
+      const bad = await fetch(`${base}/api/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ folder: "../escape", status: "applied" }),
+      });
+      expect(bad.status).toBe(400);
+    } finally {
+      server.close();
+    }
+  }, 120000);
 });
 
 describe("capture end to end", () => {
@@ -87,7 +195,7 @@ describe("capture end to end", () => {
       region: "uk" as const,
       description: JD,
     };
-    const { folder } = scaffold(tmp, req);
+    const { folder } = addApplication(tmp, req);
     expect(folder).toMatch(/^applications\/\d{4}-\d{2}-\d{2}_acme_backend-engineer$/);
     for (const f of ["job.md", "resume.typ", "notes.md"]) {
       expect(await exists(path.join(tmp, folder, f))).toBe(true);
@@ -95,13 +203,13 @@ describe("capture end to end", () => {
     const csv = await readFile(path.join(tmp, "applications.csv"), "utf8");
     expect(csv).toContain('"draft"');
 
-    const library = await loadLibrary(tmp);
+    const library = loadLibrary(tmp);
     const { analyzeFit } = await import("@jat/shared");
     const fit = analyzeFit(JD, library);
     expect(fit.projects).toHaveLength(3);
     expect(fit.projects[0].id).toBe("telemetry");
 
-    const build = verifyBuild(tmp, folder);
+    const build = buildResumes(tmp, [folder]);
     expect(build.ok).toBe(true);
   }, 120000);
 
@@ -124,9 +232,20 @@ describe("capture end to end", () => {
         }),
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { folder: string; buildOk: boolean };
+      const body = (await res.json()) as {
+        folder: string;
+        buildOk: boolean;
+        draft: { written: boolean; summary: null };
+      };
       expect(body.folder).toMatch(/^applications\//);
       expect(body.buildOk).toBe(true);
+      // Auto-draft stays off unless explicitly enabled.
+      expect(body.draft).toEqual({ written: false, summary: null });
+      const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
+        ok: boolean;
+        root: string;
+      };
+      expect(health).toEqual({ ok: true, root: tmp });
     } finally {
       server.close();
     }

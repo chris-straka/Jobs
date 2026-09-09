@@ -2,7 +2,11 @@ import { setApplicationStatus } from "@jat/core";
 import type { AppStatus } from "@jat/shared";
 import { die } from "./prompt.js";
 
-export async function statusCommand(root: string, folder: string, status: AppStatus): Promise<void> {
+export async function statusCommand(
+  root: string,
+  folder: string,
+  status: AppStatus,
+): Promise<void> {
   try {
     const { old } = setApplicationStatus(root, folder, status);
     console.log(`${folder}: ${old} -> ${status} (job.md + applications.csv)`);

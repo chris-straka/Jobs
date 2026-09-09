@@ -82,18 +82,18 @@ export function listApplications(root: string): { rows: ListedApp[]; warnings: s
       pdfState = "ok";
     }
 
-    let jobStatus = "-";
+    let current = "-";
     try {
       const found = jobStatus(readFileSync(job, "utf8"));
-      if (found) jobStatus = found;
+      if (found) current = found;
       else warnings.push(`${r.folder}: job.md has no status line`);
     } catch {
       warnings.push(`${r.folder}: job.md missing`);
     }
-    if (jobStatus !== "-" && jobStatus !== r.status) {
-      warnings.push(`${r.folder}: status drift (csv=${r.status}, job.md=${jobStatus})`);
+    if (current !== "-" && current !== r.status) {
+      warnings.push(`${r.folder}: status drift (csv=${r.status}, job.md=${current})`);
     }
-    out.push({ ...r, jobStatus, pdf: pdfState });
+    out.push({ ...r, jobStatus: current, pdf: pdfState });
   }
   return { rows: out, warnings };
 }
