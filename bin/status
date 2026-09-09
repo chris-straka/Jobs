@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Move an application to a new status in BOTH places that track it
+# (applications.csv and job.md front-matter), so they can't drift apart.
+# bin/list reports drift; this is how you fix it — and how status should
+# change in the first place.
+#
+# Usage: bin/status applications/2026-09-02_acme_role applied
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+STATUSES="draft applied interviewing offer rejected withdrawn"
+
+usage() {
+  printf 'usage: bin/status <application-folder> <%s>\n' "${STATUSES// /|}" >&2
+  exit 1
+}
+
+[ $# -eq 2 ] || usage
+FOLDER="$1"
+NEW="$2"
+
+case " $STATUSES " in
+  *" $NEW "*) ;;
+  *) printf 'error: status must be one of: %s\n' "$STATUSES" >&2; exit 1 ;;
+esac
+
+[ -d "$ROOT/$FOLDER" ] || { printf 'error: no such folder: %s\n' "$FOLDER" >&2; exit 1; }
+[ -f "$ROOT/$FOLDER/job.md" ] || { printf 'error: %s has no job.md\n' "$FOLDER" >&2; exit 1; }
+
+python3 - "$ROOT" "$FOLDER" "$NEW" <<'EOF'
+import csv, io, re, sys
+
+root, folder, new = sys.argv[1], sys.argv[2], sys.argv[3]
+
+job_path = f"{root}/{folder}/job.md"
+with open(job_path) as f:
+    job = f.read()
+m = re.search(r"^status:\s*(\S+)", job, re.M)
+if not m:
+    sys.exit(f"error: {folder}/job.md has no 'status:' front-matter line")
+old_job = m.group(1)
+with open(job_path, "w") as f:
+    f.write(job[: m.start(1)] + new + job[m.end(1) :])
+
+csv_path = f"{root}/applications.csv"
+with open(csv_path, newline="") as f:
+    header = f.readline()  # kept byte-identical; add-job writes it unquoted
+    rows = list(csv.reader(f))
+found = False
+for r in rows:
+    if len(r) >= 8 and r[7] == folder:
+        r[5] = new
+        found = True
+if not found:
+    sys.exit(f"error: {folder} has no row in applications.csv")
+out = [header]
+buf = io.StringIO()
+w = csv.writer(buf, quoting=csv.QUOTE_ALL, lineterminator="\n")
+w.writerows(rows)
+out.append(buf.getvalue())
+with open(csv_path, "w", newline="") as f:
+    f.write("".join(out))
+
+print(f"{folder}: {old_job} -> {new} (job.md + applications.csv)")
+EOF

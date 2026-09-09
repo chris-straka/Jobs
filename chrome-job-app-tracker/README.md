@@ -38,12 +38,23 @@ Load the extension: `chrome://extensions` → Developer mode → Load unpacked �
 Useful scripts (from `chrome-job-app-tracker/`):
 
 ```bash
-bun run test       # bun test across all three packages (17 tests)
+bun run test       # bun test across all three packages (17 unit tests)
 bun run typecheck  # tsc --noEmit per package (Bun strips types; it never checks them)
 bun run build      # typecheck + bundle the extension to packages/extension/dist
 bun run lint       # eslint
 bun run format     # prettier --write
 ```
+
+Browser end-to-end (needs one download, then runs headless):
+
+```bash
+bunx playwright install chromium   # once
+bun run --filter @jat/extension e2e
+```
+
+Two specs in `packages/extension/e2e/`: the real content bundle extracts a
+fixture posting, and the real popup saves through a real server into a fixture
+repo (asserting the folder, `job.md`, and CSV row).
 
 ## Configuration
 

@@ -26,7 +26,13 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 function json(res: http.ServerResponse, status: number, value: unknown): void {
-  res.writeHead(status, { "content-type": "application/json" });
+  // Single-user localhost service: allow the popup (or any local page) to call it.
+  res.writeHead(status, {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+  });
   res.end(JSON.stringify(value));
 }
 
@@ -34,6 +40,10 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
   const root = opts.root ?? repoRoot();
   const server = http.createServer((req, res) => {
     void (async () => {
+      if (req.method === "OPTIONS") {
+        json(res, 204, null);
+        return;
+      }
       if (req.method === "GET" && req.url === "/health") {
         json(res, 200, { ok: true });
         return;
@@ -76,12 +86,16 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
       json(res, 404, { error: "not found" });
     })();
   });
-  server.listen(opts.port ?? serverPort());
+  const port = opts.port ?? serverPort();
+  server.listen(port);
+  server.on("listening", () => {
+    const addr = server.address();
+    const actual = typeof addr === "object" && addr ? addr.port : port;
+    console.log(`job capture server on http://127.0.0.1:${actual} (root ${root})`);
+  });
   return server;
 }
 
 if (import.meta.main) {
-  const port = serverPort();
-  startServer({ port });
-  console.log(`job capture server on http://127.0.0.1:${port} (root ${repoRoot()})`);
+  startServer();
 }

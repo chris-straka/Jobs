@@ -6,13 +6,15 @@
   "scripts": {
     "build": "bun build src/content.ts src/popup.ts --outdir=dist --format=iife --minify",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test"
+    "test": "bun test src",
+    "e2e": "bun run build && playwright test"
   },
   "dependencies": {
     "@jat/shared": "^0.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/chrome": "^0.0.280"
   }
 }
