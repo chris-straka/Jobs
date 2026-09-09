@@ -83,6 +83,7 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
   // drifts the header right of its column. Paint after padding — padding a
   // string that already holds escape codes would under-pad it.
   const pad = (cells: string[]): string[] => cells.map((c, i) => c.padEnd(COLS[i]));
+  console.log("");
   const head = pad(["date", "company", "role", "track", "region", "status", "job", "pdf"]);
   console.log(paint(head.join(" "), "dim"));
   console.log(paint("─".repeat(head.join(" ").length), "dim"));
@@ -109,4 +110,5 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
     console.log("");
     for (const w of relevant) console.log(paint(`! ${w}`, "yellow"));
   }
+  console.log("");
 }

@@ -86,6 +86,8 @@ describe("ja", () => {
       expect(r.out).toContain("Acme");
       expect(r.out).not.toContain("Beta");
       expect(r.out).not.toContain("\x1b[");
+      expect(r.out.startsWith("\n")).toBe(true);
+      expect(r.out.endsWith("\n\n")).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
