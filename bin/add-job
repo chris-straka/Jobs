@@ -10,8 +10,8 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-Usage: bin/new-app.sh <job-url> [-c company] [-R role] [-t swe|csa] [-r us|ca|uk]
-                                [-d file|-]
+Usage: add-job [job-url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk]
+               [-d file|-]
 
 Creates applications/YYYY-MM-DD_company_role/ containing:
   job.md      the posting, verbatim
@@ -19,21 +19,27 @@ Creates applications/YYYY-MM-DD_company_role/ containing:
   notes.md    recruiter, referral, interview log
 ...and appends a row to applications.csv.
 
-Anything not passed as a flag is prompted for. Company is guessed from the URL.
+Anything not passed as a flag is prompted for. Nothing is defaulted: every
+prompt must be answered, because a silently accepted wrong value ships a wrong
+resume. The company guessed from the URL is shown as a hint, not a default.
 The description is read last: paste it and press Ctrl-D (or use -d).
 
-  us is the CSA track (TN visa). csa defaults to region us, swe to ca.
-
 Examples:
-  bin/new-app.sh https://job-boards.greenhouse.io/intersystems/jobs/7827897003
-  bin/new-app.sh https://job/123 -c Leidos -R "Systems Analyst" -t csa
-  pbpaste | bin/new-app.sh https://job/123 -c Stripe -R "Backend Eng" -t swe -d -
+  add-job
+  add-job https://job-boards.greenhouse.io/intersystems/jobs/7827897003
+  add-job https://job/123 -c Leidos -R "Systems Analyst" -t csa -r us
+  pbpaste | add-job https://job/123 -c Stripe -R "Backend Eng" -t swe -r uk -d -
 EOF
 }
 
-[ $# -ge 1 ] || { usage; exit 1; }
-case "$1" in -h|--help) usage; exit 0 ;; -*) die "first argument must be the job URL" ;; esac
-URL="$1"; shift
+# The URL is an optional first positional so `add-job` alone works; flags may
+# lead instead, in which case the URL is prompted for like everything else.
+URL=""
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  ""|-*) ;;
+  *) URL="$1"; shift ;;
+esac
 
 COMPANY=""; ROLE=""; TRACK=""; REGION=""; DESC_FILE=""
 while getopts ":c:R:t:r:d:h" opt; do
@@ -120,34 +126,29 @@ infer_company() {
 # test the open itself rather than the file's permission bits.
 tty_ok() { { true < /dev/tty; } 2>/dev/null && { true > /dev/tty; } 2>/dev/null; }
 
-ask() { # ask <prompt> <default>
-  local prompt="$1" default="${2:-}" reply=""
-  if ! tty_ok; then
-    [ -n "$default" ] || die "no terminal to prompt on — pass $prompt as a flag"
-    printf '%s' "$default"; return
-  fi
-  if [ -n "$default" ]; then printf '%s [%s]: ' "$prompt" "$default" > /dev/tty
+# Nothing is defaulted. An accepted-by-Enter wrong track or region ships a
+# resume with the wrong bullets or work-auth line, and the mistake is invisible
+# until it's already sent. A hint may be shown, but it still has to be typed.
+ask() { # ask <prompt> [hint]
+  local prompt="$1" hint="${2:-}" reply=""
+  tty_ok || die "no terminal to prompt on — pass $prompt as a flag"
+  if [ -n "$hint" ]; then printf '%s (guess: %s): ' "$prompt" "$hint" > /dev/tty
   else printf '%s: ' "$prompt" > /dev/tty; fi
   IFS= read -r reply < /dev/tty || reply=""
-  reply="${reply:-$default}"
-  [ -n "$reply" ] || die "$prompt is required"
+  [ -n "${reply//[[:space:]]/}" ] || die "$prompt is required"
   printf '%s' "$reply"
 }
 
+[ -n "$URL" ]     || URL="$(ask "Job URL")"
 [ -n "$COMPANY" ] || COMPANY="$(ask "Company" "$(infer_company "$URL")")"
-[ -n "$ROLE" ]    || ROLE="$(ask "Role title" "")"
-[ -n "$TRACK" ]   || TRACK="$(ask "Track (swe|csa)" "csa")"
+[ -n "$ROLE" ]    || ROLE="$(ask "Role title")"
+[ -n "$TRACK" ]   || TRACK="$(ask "Track (swe|csa)")"
+[ -n "$REGION" ]  || REGION="$(ask "Region (us|ca|uk)")"
 
 case "$TRACK" in
   swe|csa) ;;
   *) die "track must be 'swe' or 'csa' (got '$TRACK')" ;;
 esac
-
-# Default region by track: CSA is the US/TN track, SWE defaults to Canada.
-if [ -z "$REGION" ]; then
-  case "$TRACK" in csa) REGION=us ;; swe) REGION=ca ;; esac
-  REGION="$(ask "Region (us|ca|uk)" "$REGION")"
-fi
 case "$REGION" in
   us|ca|uk) ;;
   *) die "region must be us, ca or uk (got '$REGION')" ;;
@@ -227,7 +228,7 @@ fi
 q() { printf '"%s"' "$(printf '%s' "$1" | sed 's/"/""/g')"; }
 printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
   "$(q "$DATE")" "$(q "$COMPANY")" "$(q "$ROLE")" "$(q "$TRACK")" \
-  "$(q "$REGION")" "$(q applied)" "$(q "$URL")" "$(q "applications/$NAME")" >> "$CSV"
+  "$(q "$REGION")" "$(q draft)" "$(q "$URL")" "$(q "applications/$NAME")" >> "$CSV"
 
 printf '\ncreated applications/%s\n' "$NAME"
 printf '  job.md  %s chars\n' "${#DESC}"

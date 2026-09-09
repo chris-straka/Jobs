@@ -43,7 +43,9 @@ fi
 
 for f in "${targets[@]}"; do
   [ -f "$f" ] || { printf '  MISSING  %s\n' "$f"; fail=1; continue; }
-  out="${f%.typ}.pdf"
+  # Recruiters download this straight into a folder of other people's
+  # resumes, so the filename has to carry the name, not the source stem.
+  out="$(dirname "$f")/chris-straka-resume.pdf"
   rel="${f#"$ROOT"/}"
 
   if hit="$(uses_todo "$f")"; then

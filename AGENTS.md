@@ -13,15 +13,15 @@ Region only controls the location and work-authorization lines in the header.
 content/         master bullet library — single source of truth,
                  including defaults.yml (each track's starting projects)
 templates/       lib.typ — the renderer, all layout lives here
-applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, resume.pdf, notes.md
+applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, chris-straka-resume.pdf, notes.md
 applications.csv tracker
-bin/             new-app.sh (scaffold), build.sh (compile + page check)
+bin/             add-job (scaffold), build.sh (compile + page check)
 ```
 
 ## Commands
 
 ```bash
-bin/new-app.sh https://posting            # prompts for the rest
+add-job https://posting            # prompts for the rest
 bin/build.sh applications/2026-09-02_company_role   # one
 bin/build.sh                                        # everything
 typst watch --root . applications/<dir>/resume.typ  # live preview while editing
@@ -66,7 +66,7 @@ When asked to tailor an application:
 ## Fitting one page
 
 Turn these down in the `#resume(...)` call before cutting content:
-`leading` (0.6em → 0.52em), `bullet-gap`, `section-gap`, then `font-size`
+`leading` (0.45em → 0.40em), `bullet-gap`, `section-gap`, then `font-size`
 (12pt → 11pt). Below 10pt font or 0.6in margin it looks cramped — cut a bullet
 instead. The default is 12pt with 1in margins, which fills the page at 6–7 bullets.
 Adding a bullet means dropping one, or turning the knobs down.
