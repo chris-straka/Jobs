@@ -64,6 +64,32 @@ describe("ja", () => {
     expect(r.out).toContain("interviewing");
   });
 
+  it("filters list by status and stays plain when piped", async () => {
+    const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-list-"));
+    try {
+      await writeFile(
+        path.join(dir, "applications.csv"),
+        "date,company,role,track,region,status,url,folder\n" +
+          '"2026-09-01","Acme","Engineer","swe","uk","applied","https://x","2026-09-01_acme_engineer"\n' +
+          '"2026-09-02","Beta","Analyst","csa","us","rejected","https://y","2026-09-02_beta_analyst"\n',
+      );
+      const help = run("list", "--help");
+      expect(help.status).toBe(0);
+      expect(help.out).toContain("--status");
+      const bad = run("--root", dir, "list", "--status", "hired");
+      expect(bad.status).not.toBe(0);
+      const r = run("--root", dir, "list", "--status", "applied");
+      expect(r.status).toBe(0);
+      expect(r.out).toContain("Acme");
+      expect(r.out).not.toContain("Beta");
+      expect(r.out).not.toContain("\x1b[");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);

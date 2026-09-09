@@ -38,7 +38,7 @@ Usage: ja [--root DIR] <command> [args]   (default root: $REPO_ROOT or cwd)
       scaffold applications/YYYY-MM-DD_company_role/ (missing flags are prompted)
   build [targets...]
       compile resumes, fail on >1 page or TODO bullets (default: all)
-  list
+  list [--status stage]
       tracker table with pdf state and csv/job.md drift warnings
   status <folder> <draft|applied|interviewing|offer|rejected|withdrawn>
       move csv + job.md together
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
       return;
     }
     case "list":
-      await listCommand(root);
+      await listCommand(root, args);
       return;
     case "status": {
       const [folder, status] = args;
