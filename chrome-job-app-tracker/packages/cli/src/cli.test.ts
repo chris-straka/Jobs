@@ -157,6 +157,8 @@ describe("ja", () => {
       expect(r.status).toBe(0);
       const row = r.out.split("\n").find((l) => l.includes("Acme"));
       expect(row?.match(/applied/g)).toHaveLength(1);
+      const head = r.out.split("\n").find((l) => l.includes("job.md"));
+      expect(head!.indexOf("pdf")).toBeLessThan(head!.indexOf("job.md"));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

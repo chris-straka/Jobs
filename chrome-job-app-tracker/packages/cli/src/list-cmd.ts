@@ -30,7 +30,7 @@ const ANSI: Record<string, string> = {
 };
 
 /** Column widths shared by the header, the rule, and every row. */
-const COLS = [10, 12, 24, 5, 6, 12, 12, 7];
+const COLS = [10, 12, 24, 5, 6, 12, 7, 12];
 
 /** Color only on a real terminal that hasn't opted out — piped output stays plain. */
 function paint(text: string, color: string): string {
@@ -118,7 +118,7 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
   const lines: string[] = [""];
   const pad = (cells: string[]): string[] => cells.map((c, i) => c.padEnd(COLS[i]));
   const gap = "  ";
-  const head = pad(["date", "company", "role", "track", "region", "status", "job.md", "pdf"]);
+  const head = pad(["date", "company", "role", "track", "region", "status", "pdf", "job.md"]);
   lines.push(paint(head.join(gap), "dim"));
   lines.push(paint("─".repeat(head.join(gap).length), "dim"));
   for (const r of shown) {
@@ -129,14 +129,14 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
       r.track,
       r.region,
       r.status,
-      r.jobStatus,
       r.pdf,
+      r.jobStatus,
     ]);
     cells[0] = paint(cells[0], "magenta");
     cells[5] = paint(cells[5], stageColor(r.status));
+    cells[6] = paint(cells[6], pdfColor(r.pdf));
     // Blank when job.md agrees with the tracker — a value here means drift.
-    cells[6] = r.jobStatus === r.status ? " ".repeat(COLS[6]) : paint(cells[6], "red");
-    cells[7] = paint(cells[7], pdfColor(r.pdf));
+    cells[7] = r.jobStatus === r.status ? " ".repeat(COLS[7]) : paint(cells[7], "red");
     lines.push(cells.join(gap));
   }
   const relevant = stage
