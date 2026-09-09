@@ -17,13 +17,14 @@ function sparse(root: string): string {
   const manual = existsSync(path.join(root, "chrome-job-app-tracker", "README.md"))
     ? path.join(root, "chrome-job-app-tracker", "README.md")
     : path.join(root, "README.md");
-  return `  add       scaffold a folder for one application
+  return `  add       Create a new job application
   build     compile resumes (default: all)
   list      tracker table + drift warnings
   status    move an application (csv + job.md)
   server    start the local capture server
   probe     verify the model wiring
 
+applications: ${path.join(root, "applications")}
 ja --help for flags and defaults; manual: ${manual}`;
 }
 
