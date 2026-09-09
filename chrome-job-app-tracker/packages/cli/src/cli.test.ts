@@ -19,6 +19,25 @@ describe("ja", () => {
     }
   });
 
+  it("documents flag defaults in subcommand help", () => {
+    const add = run("add", "--help");
+    expect(add.status).toBe(0);
+    for (const flag of [
+      "-c company",
+      "-R role",
+      "-t swe|csa",
+      "-r us|ca|uk",
+      "-d file|-",
+      "--root DIR",
+    ]) {
+      expect(add.out).toContain(flag);
+    }
+    expect(add.out).toContain("prompted");
+    const server = run("server", "--help");
+    expect(server.status).toBe(0);
+    expect(server.out).toContain("8765");
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);

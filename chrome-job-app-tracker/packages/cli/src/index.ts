@@ -14,10 +14,10 @@ const COMMANDS = ["add", "build", "list", "status", "server", "probe"] as const;
 function help(): string {
   return `ja v${(pkg as { version: string }).version} — one CLI for the Jobs repo
 
-Usage: ja [--root DIR] <command> [args]
+Usage: ja [--root DIR] <command> [args]   (default root: $REPO_ROOT or cwd)
 
   add [url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk] [-d file|-]
-      scaffold applications/YYYY-MM-DD_company_role/ (prompts for the rest)
+      scaffold applications/YYYY-MM-DD_company_role/ (missing flags are prompted)
   build [targets...]
       compile resumes, fail on >1 page or TODO bullets (default: all)
   list
@@ -25,7 +25,7 @@ Usage: ja [--root DIR] <command> [args]
   status <folder> <draft|applied|interviewing|offer|rejected|withdrawn>
       move csv + job.md together
   server [--port N]
-      start the local capture server (loopback only)
+      start the local capture server, loopback only (default port: $PORT or 8765)
   probe
       verify the model wiring with a tiny completion
 
@@ -91,7 +91,9 @@ async function main(): Promise<void> {
         options: { port: { type: "string" }, help: { type: "boolean", short: "h" } },
       });
       if (values.help) {
-        console.log("Usage: ja server [--port N]");
+        console.log(
+          "Usage: ja server [--port N]\n\nLoopback only. Default port is $PORT, or 8765 when unset.",
+        );
         return;
       }
       await serverCommand(root, values.port ? Number(values.port) : undefined);

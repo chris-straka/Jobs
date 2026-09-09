@@ -14,10 +14,17 @@ Creates applications/YYYY-MM-DD_company_role/ containing:
   notes.md    recruiter, referral, interview log
 ...and appends a row to applications.csv.
 
-Anything not passed as a flag is prompted for. Nothing is defaulted: every
-prompt must be answered, because a silently accepted wrong value ships a wrong
-resume. The company guessed from the URL is shown as a hint, not a default.
-The description is read last: paste it and press Ctrl-D (or use -d).`;
+Flag defaults — a missing flag is prompted for, never silently defaulted,
+because a silently accepted wrong value ships a wrong resume:
+  job-url       positional; prompted when missing
+  -c company    prompted (the URL guess is shown as a hint, not a default)
+  -R role       prompted
+  -t swe|csa    prompted
+  -r us|ca|uk   prompted
+  -d file|-     posting source (default: stdin when piped, else paste + Ctrl-D)
+  --root DIR    repo root (default: $REPO_ROOT or current directory)
+
+The description is read last.`;
 }
 
 export async function addCommand(root: string, argv: string[]): Promise<void> {
