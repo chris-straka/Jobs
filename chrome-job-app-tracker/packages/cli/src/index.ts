@@ -5,6 +5,7 @@ import { allResumes, buildResumes } from "@jat/core";
 import { AppStatus } from "@jat/shared";
 import { addCommand } from "./add.js";
 import { extensionCommand } from "./extension-cmd.js";
+import { installHostCommand } from "./install-host-cmd.js";
 import { listCommand } from "./list-cmd.js";
 import { statusCommand } from "./status-cmd.js";
 import { serverCommand } from "./server-cmd.js";
@@ -12,7 +13,16 @@ import { probeCommand } from "./probe-cmd.js";
 import { die } from "./prompt.js";
 import pkg from "../package.json" with { type: "json" };
 
-const COMMANDS = ["add", "build", "list", "status", "server", "probe", "extension"] as const;
+const COMMANDS = [
+  "add",
+  "build",
+  "list",
+  "status",
+  "server",
+  "probe",
+  "extension",
+  "install-host",
+] as const;
 
 function sparse(root: string): string {
   const manual = existsSync(path.join(root, "chrome-job-app-tracker", "README.md"))
@@ -26,6 +36,7 @@ function sparse(root: string): string {
   server    start the local capture server
   probe     verify the model wiring
   extension build + copy the extension to Downloads
+  install-host enable one-click server Start/Stop
   help      full flags and defaults
 
 ${path.join(root, "applications")}
@@ -52,6 +63,8 @@ Usage: ja [--root DIR] <command> [args]   (default root: $REPO_ROOT or cwd)
       verify the model wiring with a tiny completion
   extension [--out DIR] [--watch]
       rebuild + copy a load-ready extension folder to ~/Downloads
+  install-host [--id ID] [--browser brave|chrome|chromium]
+      install the native host for one-click server Start/Stop
 
 Run from the repo root, or pass --root. ja <command> --help for detail.`;
 }
@@ -138,6 +151,9 @@ async function main(): Promise<void> {
       return;
     case "extension":
       await extensionCommand(root, args);
+      return;
+    case "install-host":
+      await installHostCommand(root, args);
       return;
     default:
       die(`unknown command '${cmd}' (expected one of: ${COMMANDS.join(", ")})`);

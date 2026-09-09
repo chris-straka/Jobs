@@ -24,7 +24,16 @@ describe("ja", () => {
   it("prints help with all subcommands", () => {
     const r = run("--help");
     expect(r.status).toBe(0);
-    for (const cmd of ["add", "build", "list", "status", "server", "probe", "extension"]) {
+    for (const cmd of [
+      "add",
+      "build",
+      "list",
+      "status",
+      "server",
+      "probe",
+      "extension",
+      "install-host",
+    ]) {
       expect(r.out).toContain(cmd);
     }
   });
@@ -51,7 +60,16 @@ describe("ja", () => {
   it("shows a sparse menu with no args and the full menu with --help", () => {
     const bare = run();
     expect(bare.status).toBe(0);
-    for (const cmd of ["add", "build", "list", "status", "server", "probe", "extension"]) {
+    for (const cmd of [
+      "add",
+      "build",
+      "list",
+      "status",
+      "server",
+      "probe",
+      "extension",
+      "install-host",
+    ]) {
       expect(bare.out).toContain(cmd);
     }
     expect(bare.out).toContain("full flags and defaults");
@@ -222,6 +240,48 @@ describe("ja", () => {
       }
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("install-host documents itself and detects the loaded extension", async () => {
+    const { mkdtemp, mkdir, rm, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { browserDirs, detectExtensionId } = await import("./install-host-cmd.js");
+    const help = run("install-host", "--help");
+    expect(help.status).toBe(0);
+    expect(help.out).toContain("--id");
+
+    const home = await mkdtemp(path.join(tmpdir(), "jat-home-"));
+    try {
+      const cand = path.join(home, "ext");
+      await mkdir(cand, { recursive: true });
+      const profile = path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+        "Default",
+      );
+      await mkdir(profile, { recursive: true });
+      await writeFile(
+        path.join(profile, "Secure Preferences"),
+        JSON.stringify({ extensions: { settings: { abc123: { path: cand } } } }),
+      );
+      const found = detectExtensionId([cand], browserDirs(home));
+      expect(found).toEqual({ id: "abc123", browser: "brave" });
+      expect(detectExtensionId([path.join(home, "missing")], browserDirs(home))).toBeNull();
+
+      const empty = await mkdtemp(path.join(tmpdir(), "jat-noroot-"));
+      try {
+        const bad = run("--root", empty, "install-host", "--id", "x");
+        expect(bad.status).not.toBe(0);
+        expect(bad.out).toContain("no native host checkout");
+      } finally {
+        await rm(empty, { recursive: true, force: true });
+      }
+    } finally {
+      await rm(home, { recursive: true, force: true });
     }
   });
 

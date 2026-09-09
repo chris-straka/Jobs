@@ -113,20 +113,9 @@ async function copyStop(): Promise<void> {
   showToast((await copyText(cmd)) ? `Copied:\n${cmd}` : "Copy failed — select and copy manually.");
 }
 
-/** Exact one-time install command, when the export stamp knows the checkout. */
+/** One memorable command — it finds the extension id itself. */
 function installHint(): string {
-  const id = chrome.runtime?.id || "<extension-id>";
-  if (serverRoot) {
-    return (
-      `One-click Start needs the native host. Run once:\n` +
-      `sh ${serverRoot}/chrome-job-app-tracker/packages/native-host/install.sh --id ${id}`
-    );
-  }
-  return (
-    `One-click Start needs the native host.\n` +
-    `Run packages/native-host/install.sh --id ${id} from the checkout ` +
-    `(id from chrome://extensions, Developer mode).`
-  );
+  return `One-click Start needs the native host. Run once in a terminal:\nja install-host`;
 }
 
 const NATIVE_HOST = "com.jobs.jat";

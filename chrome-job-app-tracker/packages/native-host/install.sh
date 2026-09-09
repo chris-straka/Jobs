@@ -1,37 +1,49 @@
 #!/usr/bin/env bash
 # Install (or remove) the native-messaging host for the Jobs extension.
 #
-#   packages/native-host/install.sh --id <extension-id>   # install
-#   packages/native-host/install.sh uninstall             # remove
+#   packages/native-host/install.sh [--browser brave] --id <extension-id>   # install
+#   packages/native-host/install.sh uninstall                               # remove
 #
 # Find the extension id at chrome://extensions with Developer mode on
 # (unpacked extensions keep a stable id per path). Writes two machine-local
-# files that are never committed: a wrapper with absolute paths, and Chrome's
-# host manifest pointing at it.
+# files that are never committed: a wrapper with absolute paths, and the
+# browser's host manifest pointing at it.
 set -euo pipefail
 
 HOST_NAME="com.jobs.jat"
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TRACKER_DIR="$(dirname "$PKG_DIR")"
+TRACKER_DIR="$(dirname "$(dirname "$PKG_DIR")")"
 JOBS_ROOT="$(dirname "$TRACKER_DIR")"
-MANIFEST_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-if [ "${1:-}" = "uninstall" ]; then
+ID=""
+BROWSER="chrome"
+UNINSTALL=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    uninstall) UNINSTALL=1; shift ;;
+    --id) ID="${2:-}"; shift 2 ;;
+    --id=*) ID="${1#--id=}"; shift ;;
+    --browser) BROWSER="${2:-}"; shift 2 ;;
+    --browser=*) BROWSER="${1#--browser=}"; shift ;;
+    *) die "usage: install.sh [--browser chrome|brave|chromium] --id <extension-id> | install.sh [--browser ...] uninstall" ;;
+  esac
+done
+case "$BROWSER" in
+  chrome) APP_DIR="Google/Chrome" ;;
+  brave) APP_DIR="BraveSoftware/Brave-Browser" ;;
+  chromium) APP_DIR="Chromium" ;;
+  *) die "unknown browser '$BROWSER' (expected chrome|brave|chromium)" ;;
+esac
+MANIFEST_DIR="$HOME/Library/Application Support/$APP_DIR/NativeMessagingHosts"
+
+if [ "$UNINSTALL" = 1 ]; then
   rm -f "$MANIFEST_DIR/$HOST_NAME.json"
   rm -rf "$PKG_DIR/.generated"
   echo "removed $HOST_NAME"
   exit 0
 fi
-
-ID=""
-case "${1:-}" in
-  --id) ID="${2:-}" ;;
-  --id=*) ID="${1#--id=}" ;;
-  "") ;;
-  *) die "usage: install.sh --id <extension-id> | install.sh uninstall" ;;
-esac
 if [ -z "$ID" ]; then
   if [ -t 0 ]; then
     printf 'Extension id (chrome://extensions, Developer mode): ' >&2
@@ -50,7 +62,7 @@ WRAP="$PKG_DIR/.generated/run-host.sh"
   printf 'export JAT_TRACKER_DIR="%s"\n' "$TRACKER_DIR"
   printf 'export JAT_PORT="8765"\n'
   printf 'export JAT_BUN="%s"\n' "$BUN"
-  printf 'exec "%s" "%s/host.ts"\n' "$BUN" "$PKG_DIR"
+  printf 'exec "%s" "%s/src/host.ts"\n' "$BUN" "$PKG_DIR"
 } > "$WRAP"
 chmod +x "$WRAP"
 

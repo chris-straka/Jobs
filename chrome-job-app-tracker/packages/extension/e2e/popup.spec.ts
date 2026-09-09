@@ -6,6 +6,9 @@ import { JD, mkFixtureRepo, pkgDir, startCaptureServer, startStatic } from "./he
 test("popup save creates an application through the real server", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const { dir, cleanup } = await mkFixtureRepo();
+  // The build stamps the real checkout path; remove it so the fixture stays isolated.
+  const { rm } = await import("node:fs/promises");
+  await rm(path.join(pkgDir, "repo-root.txt"), { force: true });
   const capture = await startCaptureServer(dir);
   const site = await startStatic(pkgDir);
   try {
