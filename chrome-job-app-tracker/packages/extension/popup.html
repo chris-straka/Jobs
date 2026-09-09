@@ -72,8 +72,7 @@
         margin-top: 8px;
         white-space: pre-wrap;
       }
-      #count,
-      #track-line {
+      #count {
         color: var(--muted);
         font-size: 12px;
       }
@@ -96,10 +95,12 @@
       <div><button id="srv-start" type="button">Start server</button></div>
       <div><button id="srv-stop" type="button">Stop server</button></div>
     </div>
-    <div class="row">
-      <div><button id="copy-start" type="button">Copy start cmd</button></div>
-      <div><button id="copy-stop" type="button">Copy stop cmd</button></div>
+    <div class="row" id="copy-row">
+      <div><button id="copy-start" type="button">⧉ Copy start cmd</button></div>
+      <div><button id="copy-stop" type="button">⧉ Copy stop cmd</button></div>
     </div>
+    <label for="server">Capture server</label>
+    <input id="server" disabled />
     <label for="company">Company</label>
     <input id="company" />
     <label for="role">Role title</label>
@@ -112,9 +113,6 @@
         <option value="uk">uk</option>
       </select>
     </div>
-    <div id="track-line"></div>
-    <label for="server">Capture server</label>
-    <input id="server" />
     <label for="description">Posting text <span id="count"></span></label>
     <textarea id="description"></textarea>
     <button id="save" type="button">Save to Jobs repo</button>

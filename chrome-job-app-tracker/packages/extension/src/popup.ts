@@ -23,18 +23,18 @@ async function checkHealth(): Promise<void> {
   try {
     const res = await fetch(`${serverBase()}/health`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      dot.textContent = "● server online";
+      dot.textContent = "● Job server online";
       dot.style.color = "green";
       const body = (await res.json().catch(() => null)) as { root?: unknown } | null;
       if (body && typeof body.root === "string") {
         await chrome.storage.local.set({ serverRoot: body.root });
       }
     } else {
-      dot.textContent = "● server error";
+      dot.textContent = "● Job server error";
       dot.style.color = "red";
     }
   } catch {
-    dot.textContent = "● server offline — copy the start cmd below";
+    dot.textContent = "● Job server offline";
     dot.style.color = "red";
   }
 }
@@ -90,32 +90,43 @@ async function nativeCall(msg: Record<string, unknown>): Promise<unknown | null>
   }
 }
 
-/** Show native buttons only when the host answers; copy buttons are the fallback. */
+/**
+ * Native Start/Stop is the primary control; the copy buttons appear only
+ * when the host is missing or a native call fails.
+ */
 async function refreshNative(): Promise<void> {
-  const row = el("native-row");
   const status = (await nativeCall({ cmd: "status" })) as {
     ok?: boolean;
     running?: boolean;
   } | null;
-  if (!status?.ok) {
-    row.hidden = true;
-    return;
-  }
-  row.hidden = false;
+  const works = status?.ok === true;
+  el("native-row").hidden = !works;
+  el("copy-row").hidden = works;
+  if (!works) return;
   (el("srv-start") as HTMLButtonElement).disabled = status.running === true;
   (el("srv-stop") as HTMLButtonElement).disabled = status.running !== true;
 }
 
 async function nativeStart(): Promise<void> {
   const r = (await nativeCall({ cmd: "start" })) as { ok?: boolean; reason?: string } | null;
-  show(r?.ok === true ? "Server starting…" : `Start failed: ${r?.reason ?? "no host"}`);
+  if (r?.ok !== true) {
+    el("copy-row").hidden = false;
+    show(`Start failed (${r?.reason ?? "no host"}) — copy buttons below as fallback.`);
+  } else {
+    show("Server starting…");
+  }
   await checkHealth();
   await refreshNative();
 }
 
 async function nativeStop(): Promise<void> {
   const r = (await nativeCall({ cmd: "stop" })) as { ok?: boolean; reason?: string } | null;
-  show(r?.ok === true ? "Server stopped." : `Stop failed: ${r?.reason ?? "no host"}`);
+  if (r?.ok !== true) {
+    el("copy-row").hidden = false;
+    show(`Stop failed (${r?.reason ?? "no host"}) — copy buttons below as fallback.`);
+  } else {
+    show("Server stopped.");
+  }
   await checkHealth();
   await refreshNative();
 }
@@ -155,11 +166,6 @@ function capitalize(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
-/** Track line under the form. Track is auto — fix it in resume.typ if wrong. */
-function renderTrackLine(track: string): void {
-  el("track-line").textContent = `Track: ${track} (auto — fix in resume.typ if wrong)`;
-}
-
 /** Restores stored prefs and, when the tab allows it, prefills the posting. */
 async function prefill(): Promise<void> {
   const stored = await chrome.storage.local.get(["server", "region"]);
@@ -194,7 +200,6 @@ async function prefill(): Promise<void> {
   updateCount();
   (el("region") as HTMLSelectElement).value =
     guessRegion(tabUrl, `${title} ${description}`) || storedRegion;
-  renderTrackLine(detectTrack(title, description));
 }
 
 function updateCount(): void {
@@ -221,7 +226,6 @@ async function save(): Promise<void> {
   const role = (el("role") as HTMLInputElement).value.trim();
   const description = (el("description") as HTMLTextAreaElement).value;
   const track = detectTrack(role, description);
-  renderTrackLine(track);
   const parsed = CaptureRequest.safeParse({
     url: tabUrl,
     company: (el("company") as HTMLInputElement).value.trim(),

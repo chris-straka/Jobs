@@ -10,8 +10,16 @@ test("popup save creates an application through the real server", async ({ page,
   const site = await startStatic(pkgDir);
   try {
     await page.addInitScript(
-      ({ jobUrl, description }: { jobUrl: string; description: string }) => {
-        const store: Record<string, unknown> = {};
+      ({
+        jobUrl,
+        description,
+        serverUrl,
+      }: {
+        jobUrl: string;
+        description: string;
+        serverUrl: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl };
         const fakeChrome = {
           storage: {
             local: {
@@ -36,14 +44,23 @@ test("popup save creates an application through the real server", async ({ page,
         };
         (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
       },
-      { jobUrl: `${site.url}/e2e/fixture-job.html`, description: `prefill ${"x".repeat(200)}` },
+      {
+        jobUrl: `${site.url}/e2e/fixture-job.html`,
+        description: `prefill ${"x".repeat(200)}`,
+        serverUrl: capture.url,
+      },
     );
 
     await page.goto(`${site.url}/popup.html`);
     await page.locator("#company").fill("Acme");
     await page.locator("#role").fill("Backend Engineer");
-    await page.locator("#server").fill(capture.url);
     await page.locator("#description").fill(JD);
+
+    // Fixed server URL, no track input, copy fallback visible without a host.
+    await expect(page.locator("#server")).toBeDisabled();
+    await expect(page.locator("#server")).toHaveValue(capture.url);
+    await expect(page.locator("#track")).toHaveCount(0);
+    await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
 
     await expect(page.locator("#status")).toContainText(/Saved applications\//, {
@@ -59,7 +76,7 @@ test("popup save creates an application through the real server", async ({ page,
     expect(csv).toContain('"draft"');
 
     // Mark applied resolves this tab's URL and moves csv + job.md together.
-    await expect(page.locator("#health")).toContainText("server online");
+    await expect(page.locator("#health")).toContainText("Job server online");
     await page.locator("#mark-applied").click();
     await expect(page.locator("#status")).toContainText(/Marked applied/, { timeout: 15000 });
     const csv2 = await readFile(path.join(dir, "applications.csv"), "utf8");
