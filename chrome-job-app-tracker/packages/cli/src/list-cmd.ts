@@ -30,7 +30,7 @@ const COLS = [10, 12, 24, 5, 6, 12, 12, 7];
 
 /** Color only on a real terminal that hasn't opted out — piped output stays plain. */
 function paint(text: string, color: string): string {
-  if (process.env.NO_COLOR || !process.stdout.isTTY) return text;
+  if (!color || process.env.NO_COLOR || !process.stdout.isTTY) return text;
   return `${ANSI[color]}${text}${ANSI.reset}`;
 }
 
@@ -46,7 +46,7 @@ function stageColor(stage: string): string {
     case "withdrawn":
       return "red";
     default:
-      return "gray";
+      return ""; // draft and anything unexpected stay plain
   }
 }
 
