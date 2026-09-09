@@ -12,7 +12,10 @@ Default: every application. --status filters to one stage:
   ${AppStatus.options.join(", ")}
 
 clipboard copies the plain-text table to the system clipboard
-(pbcopy on macOS, else xclip, xsel, or wl-copy).`;
+(pbcopy on macOS, else xclip, xsel, or wl-copy).
+
+The job.md column stays blank while job.md agrees with the tracker;
+a value there means the two have drifted (also reported below).`;
 }
 
 const ANSI: Record<string, string> = {
@@ -114,9 +117,10 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
   // string that already holds escape codes would under-pad it.
   const lines: string[] = [""];
   const pad = (cells: string[]): string[] => cells.map((c, i) => c.padEnd(COLS[i]));
-  const head = pad(["date", "company", "role", "track", "region", "status", "job", "pdf"]);
-  lines.push(paint(head.join(" "), "dim"));
-  lines.push(paint("─".repeat(head.join(" ").length), "dim"));
+  const gap = "  ";
+  const head = pad(["date", "company", "role", "track", "region", "status", "job.md", "pdf"]);
+  lines.push(paint(head.join(gap), "dim"));
+  lines.push(paint("─".repeat(head.join(gap).length), "dim"));
   for (const r of shown) {
     const cells = pad([
       r.date,
@@ -130,9 +134,10 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
     ]);
     cells[0] = paint(cells[0], "magenta");
     cells[5] = paint(cells[5], stageColor(r.status));
-    cells[6] = paint(cells[6], stageColor(r.jobStatus));
+    // Blank when job.md agrees with the tracker — a value here means drift.
+    cells[6] = r.jobStatus === r.status ? " ".repeat(COLS[6]) : paint(cells[6], "red");
     cells[7] = paint(cells[7], pdfColor(r.pdf));
-    lines.push(cells.join(" "));
+    lines.push(cells.join(gap));
   }
   const relevant = stage
     ? warnings.filter((w) => shown.some((r) => w.startsWith(`${r.folder}:`)))

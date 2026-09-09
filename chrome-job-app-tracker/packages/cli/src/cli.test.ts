@@ -138,6 +138,30 @@ describe("ja", () => {
     }
   });
 
+  it("blanks the job column when job.md agrees with the tracker", async () => {
+    const { mkdtemp, mkdir, rm, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-drift-"));
+    try {
+      await writeFile(
+        path.join(dir, "applications.csv"),
+        "date,company,role,track,region,status,url,folder\n" +
+          '"2026-09-01","Acme","Engineer","swe","uk","applied","https://x","2026-09-01_acme_engineer"\n',
+      );
+      await mkdir(path.join(dir, "2026-09-01_acme_engineer"));
+      await writeFile(
+        path.join(dir, "2026-09-01_acme_engineer", "job.md"),
+        "---\nstatus: applied\n---\n\nposting\n",
+      );
+      const r = run("--root", dir, "list");
+      expect(r.status).toBe(0);
+      const row = r.out.split("\n").find((l) => l.includes("Acme"));
+      expect(row?.match(/applied/g)).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);
