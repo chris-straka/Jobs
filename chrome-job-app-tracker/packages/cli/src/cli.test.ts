@@ -48,6 +48,7 @@ describe("ja", () => {
     expect(bare.out).toContain("README.md");
     expect(bare.out).toContain("Create a new job application");
     expect(bare.out).toContain("applications:");
+    expect(bare.out.startsWith("\n")).toBe(true);
     expect(bare.out).not.toContain("8765");
     expect(bare.out).not.toContain("one CLI");
     const full = run("--help");

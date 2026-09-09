@@ -17,7 +17,8 @@ function sparse(root: string): string {
   const manual = existsSync(path.join(root, "chrome-job-app-tracker", "README.md"))
     ? path.join(root, "chrome-job-app-tracker", "README.md")
     : path.join(root, "README.md");
-  return `  add       Create a new job application
+  return `
+  add       Create a new job application
   build     compile resumes (default: all)
   list      tracker table + drift warnings
   status    move an application (csv + job.md)
