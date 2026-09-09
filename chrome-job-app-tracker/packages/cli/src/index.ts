@@ -40,7 +40,7 @@ Usage: ja [--root DIR] <command> [args]   (default root: $REPO_ROOT or cwd)
       scaffold applications/YYYY-MM-DD_company_role/ (missing flags are prompted)
   build [targets...]
       compile resumes, fail on >1 page or TODO bullets (default: all)
-  list [--status stage]
+  list [--status stage] [clipboard]
       tracker table with pdf state and csv/job.md drift warnings
   status <folder> <draft|applied|interviewing|offer|rejected|withdrawn>
       move csv + job.md together

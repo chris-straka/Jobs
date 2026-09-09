@@ -1,14 +1,18 @@
+import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { listApplications } from "@jat/core";
 import { AppStatus } from "@jat/shared";
 import { die } from "./prompt.js";
 
 export function listHelp(): string {
-  return `Usage: ja list [--status stage]
+  return `Usage: ja list [--status stage] [clipboard]
 
 Tracker table with pdf state and csv/job.md drift warnings.
 Default: every application. --status filters to one stage:
-  ${AppStatus.options.join(", ")}`;
+  ${AppStatus.options.join(", ")}
+
+clipboard copies the plain-text table to the system clipboard
+(pbcopy on macOS, else xclip, xsel, or wl-copy).`;
 }
 
 const ANSI: Record<string, string> = {
@@ -57,16 +61,40 @@ function pdfColor(pdf: string): string {
   }
 }
 
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function copyToClipboard(text: string): void {
+  const tools = [
+    ["pbcopy"],
+    ["xclip", "-selection", "clipboard"],
+    ["xsel", "--clipboard", "--input"],
+    ["wl-copy"],
+  ];
+  for (const [cmd, ...args] of tools) {
+    const r = spawnSync(cmd, args, {
+      input: text,
+      encoding: "utf8",
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    if (!r.error && r.status === 0) return;
+  }
+  die("no clipboard tool found (tried pbcopy, xclip, xsel, wl-copy)");
+}
+
 export async function listCommand(root: string, argv: string[]): Promise<void> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     args: argv,
-    allowPositionals: false,
+    allowPositionals: true,
     options: { status: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   if (values.help) {
     console.log(listHelp());
     return;
   }
+  const extra = positionals.filter((p) => p !== "clipboard");
+  if (extra.length > 0) die("usage: ja list [--status stage] [clipboard]");
   let stage: string | undefined;
   if (values.status) {
     const parsed = AppStatus.safeParse(values.status);
@@ -82,11 +110,11 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
   // Dim, never bold: bold glyphs render wider in most terminal fonts, which
   // drifts the header right of its column. Paint after padding — padding a
   // string that already holds escape codes would under-pad it.
+  const lines: string[] = [""];
   const pad = (cells: string[]): string[] => cells.map((c, i) => c.padEnd(COLS[i]));
-  console.log("");
   const head = pad(["date", "company", "role", "track", "region", "status", "job", "pdf"]);
-  console.log(paint(head.join(" "), "dim"));
-  console.log(paint("─".repeat(head.join(" ").length), "dim"));
+  lines.push(paint(head.join(" "), "dim"));
+  lines.push(paint("─".repeat(head.join(" ").length), "dim"));
   for (const r of shown) {
     const cells = pad([
       r.date,
@@ -101,14 +129,20 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
     cells[5] = paint(cells[5], stageColor(r.status));
     cells[6] = paint(cells[6], stageColor(r.jobStatus));
     cells[7] = paint(cells[7], pdfColor(r.pdf));
-    console.log(cells.join(" "));
+    lines.push(cells.join(" "));
   }
   const relevant = stage
     ? warnings.filter((w) => shown.some((r) => w.startsWith(`${r.folder}:`)))
     : warnings;
   if (relevant.length > 0) {
-    console.log("");
-    for (const w of relevant) console.log(paint(`! ${w}`, "yellow"));
+    lines.push("");
+    for (const w of relevant) lines.push(paint(`! ${w}`, "yellow"));
   }
-  console.log("");
+  lines.push("");
+  if (positionals.includes("clipboard")) {
+    copyToClipboard(lines.map(stripAnsi).join("\n"));
+    console.log(`copied ${shown.length} application${shown.length === 1 ? "" : "s"} to clipboard`);
+    return;
+  }
+  for (const line of lines) console.log(line);
 }

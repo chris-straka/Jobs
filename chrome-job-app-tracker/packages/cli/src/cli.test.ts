@@ -10,6 +10,14 @@ function run(...args: string[]): { status: number | null; out: string } {
   return { status: r.status, out: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
 }
 
+function runWithEnv(env: Record<string, string>, ...args: string[]) {
+  const r = spawnSync("bun", [entry, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+  return { status: r.status, out: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
+}
+
 describe("ja", () => {
   it("prints help with all subcommands", () => {
     const r = run("--help");
@@ -88,6 +96,43 @@ describe("ja", () => {
       expect(r.out).not.toContain("\x1b[");
       expect(r.out.startsWith("\n")).toBe(true);
       expect(r.out.endsWith("\n\n")).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("copies list to the clipboard via a PATH shim", async () => {
+    const { mkdtemp, mkdir, rm, writeFile, chmod, readFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-clip-"));
+    try {
+      await writeFile(
+        path.join(dir, "applications.csv"),
+        "date,company,role,track,region,status,url,folder\n" +
+          '"2026-09-01","Acme","Engineer","swe","uk","applied","https://x","2026-09-01_acme_engineer"\n' +
+          '"2026-09-02","Beta","Analyst","csa","us","rejected","https://y","2026-09-02_beta_analyst"\n',
+      );
+      const bin = path.join(dir, "bin");
+      await mkdir(bin);
+      const pasted = path.join(dir, "paste.txt");
+      await writeFile(path.join(bin, "pbcopy"), `#!/bin/sh\ncat > '${pasted}'\n`);
+      await chmod(path.join(bin, "pbcopy"), 0o755);
+      const r = runWithEnv(
+        { PATH: `${bin}:${process.env.PATH}` },
+        "--root",
+        dir,
+        "list",
+        "clipboard",
+      );
+      expect(r.status).toBe(0);
+      expect(r.out).toContain("copied 2 applications to clipboard");
+      const text = await readFile(pasted, "utf8");
+      expect(text).toContain("Acme");
+      expect(text).toContain("Beta");
+      expect(text).toContain("track");
+      expect(text).not.toContain("\x1b[");
+      const bad = run("--root", dir, "list", "frobnicate");
+      expect(bad.status).not.toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
