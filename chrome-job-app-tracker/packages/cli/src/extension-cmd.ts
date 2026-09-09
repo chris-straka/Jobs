@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, watch } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -18,7 +18,7 @@ manual Reload plus a tab reload to pick changes up.`;
 
 const EXPORT_FILES = ["manifest.json", "popup.html", "dist", "icons"];
 
-function buildAndExport(tracker: string, ext: string, out: string): void {
+function buildAndExport(tracker: string, ext: string, out: string, jobsRoot: string): void {
   const build = spawnSync("bun", ["run", "--filter", "@jat/extension", "build"], {
     cwd: tracker,
     encoding: "utf8",
@@ -36,6 +36,7 @@ function buildAndExport(tracker: string, ext: string, out: string): void {
     if (!existsSync(src)) die(`extension build incomplete — missing ${f}`);
     cpSync(src, path.join(out, f), { recursive: true });
   }
+  writeFileSync(path.join(out, "repo-root.txt"), `${jobsRoot}\n`);
 }
 
 export async function extensionCommand(root: string, argv: string[]): Promise<void> {
@@ -58,21 +59,25 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
   const ext = path.join(tracker, "packages", "extension");
   if (!existsSync(path.join(ext, "package.json"))) die(`no extension checkout under ${tracker}`);
   const out = values.out ?? path.join(homedir(), "Downloads", "jat-extension");
+  // Stamp the Jobs root so the popup builds runnable commands without the host.
+  const jobsRoot = existsSync(path.join(root, "chrome-job-app-tracker", "package.json"))
+    ? root
+    : path.dirname(root);
   if (!values.watch) {
-    buildAndExport(tracker, ext, out);
+    buildAndExport(tracker, ext, out, jobsRoot);
     console.log(
       `extension ready: ${out}\nload it at chrome://extensions (Developer mode → Load unpacked)`,
     );
     return;
   }
   console.log(`watching ${ext} → ${out} (Ctrl-C to stop)`);
-  buildAndExport(tracker, ext, out);
+  buildAndExport(tracker, ext, out, jobsRoot);
   console.log(`extension ready: ${out}`);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const reexport = (): void => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      buildAndExport(tracker, ext, out);
+      buildAndExport(tracker, ext, out, jobsRoot);
       console.log(`re-exported: ${out}`);
     }, 300);
   };

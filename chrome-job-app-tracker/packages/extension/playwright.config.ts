@@ -7,5 +7,8 @@ export default defineConfig({
   timeout: 90000,
   retries: 0,
   reporter: "list",
+  // Serial: the save spec compiles a real resume; parallel workers starve it
+  // past its 30s save timeout on this machine.
+  workers: 1,
   use: { headless: true },
 });

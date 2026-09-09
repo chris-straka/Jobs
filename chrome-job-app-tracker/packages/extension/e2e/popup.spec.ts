@@ -86,7 +86,7 @@ test("popup save creates an application through the real server", async ({ page,
 
     // One copy button follows the server: stop cmd while online...
     await page.locator("#copy-srv").click();
-    await expect(page.locator("#status")).toContainText("Copied:");
+    await expect(page.locator("#toast")).toContainText("Copied:");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       `pkill -f "server/src/index.ts"`,
     );
@@ -96,7 +96,7 @@ test("popup save creates an application through the real server", async ({ page,
     await page.reload();
     await expect(page.locator("#health")).toContainText("Job server offline");
     await page.locator("#copy-srv").click();
-    await expect(page.locator("#status")).toContainText("Copied:");
+    await expect(page.locator("#toast")).toContainText("Copied:");
     const startCmd = await page.evaluate(() => navigator.clipboard.readText());
     expect(startCmd).toContain("bun run server");
     expect(startCmd).toContain(dir);
@@ -108,5 +108,71 @@ test("popup save creates an application through the real server", async ({ page,
     site.close();
     capture.stop();
     await cleanup();
+  }
+});
+
+test("native toggle starts and stops the server through the host", async ({ page }) => {
+  await page.addInitScript(() => {
+    let started = false;
+    const calls: string[] = [];
+    const store: Record<string, unknown> = {};
+    const fakeChrome = {
+      storage: {
+        local: {
+          get: (keys: string[]): Promise<Record<string, unknown>> =>
+            Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+          set: (obj: Record<string, unknown>): Promise<void> => {
+            Object.assign(store, obj);
+            return Promise.resolve();
+          },
+        },
+      },
+      tabs: {
+        query: (): Promise<unknown[]> => Promise.resolve([]),
+      },
+      runtime: {
+        sendNativeMessage: (_host: string, msg: { cmd?: string }): Promise<unknown> => {
+          calls.push(msg.cmd ?? "?");
+          if (msg.cmd === "status") return Promise.resolve({ ok: true, running: started });
+          if (msg.cmd === "start") {
+            started = true;
+            return Promise.resolve({ ok: true });
+          }
+          if (msg.cmd === "stop") {
+            started = false;
+            return Promise.resolve({ ok: true });
+          }
+          return Promise.resolve({ ok: false });
+        },
+      },
+    };
+    const w = window as unknown as { chrome?: unknown; __jatCalls?: string[] };
+    w.chrome = fakeChrome;
+    w.__jatCalls = calls;
+  });
+
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#srv-toggle")).toBeVisible();
+    await expect(page.locator("#srv-toggle")).toHaveText("Start server");
+    await expect(page.locator("#copy-row")).toBeHidden();
+
+    await page.locator("#srv-toggle").click();
+    await expect(page.locator("#status")).toContainText("Server starting");
+    await expect(page.locator("#srv-toggle")).toHaveText("Stop server");
+
+    await page.locator("#srv-toggle").click();
+    await expect(page.locator("#status")).toContainText("Server stopped");
+    await expect(page.locator("#srv-toggle")).toHaveText("Start server");
+
+    const calls = await page.evaluate(
+      () => (window as unknown as { __jatCalls?: string[] }).__jatCalls ?? [],
+    );
+    expect(calls[0]).toBe("status");
+    expect(calls).toContain("start");
+    expect(calls).toContain("stop");
+  } finally {
+    site.close();
   }
 });

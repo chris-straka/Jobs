@@ -40,6 +40,7 @@ async function checkHealth(): Promise<void> {
       serverOnline = true;
       const body = (await res.json().catch(() => null)) as { root?: unknown } | null;
       if (body && typeof body.root === "string") {
+        serverRoot = body.root;
         await chrome.storage.local.set({ serverRoot: body.root });
       }
     } else {
@@ -75,18 +76,57 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** Jobs root for runnable commands: live health truth, else the export stamp. */
+let serverRoot = "";
+
+async function loadRepoRoot(): Promise<void> {
+  try {
+    const res = await fetch(chrome.runtime.getURL("repo-root.txt"));
+    const text = (await res.text()).trim().replace(/\/$/, "");
+    if (text) serverRoot = text;
+  } catch {
+    // export predates the stamp — health root or placeholder still works
+  }
+}
+
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+function showToast(text: string): void {
+  const toast = el("toast");
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, 3500);
+}
+
 async function copyStart(): Promise<void> {
-  const stored = await chrome.storage.local.get(["serverRoot"]);
-  const root = typeof stored.serverRoot === "string" ? stored.serverRoot : null;
-  const cmd = root
-    ? `cd ${root}/chrome-job-app-tracker && bun run server`
+  const cmd = serverRoot
+    ? `cd ${serverRoot}/chrome-job-app-tracker && bun run server`
     : "cd <jobs-checkout>/chrome-job-app-tracker && bun run server";
-  show((await copyText(cmd)) ? `Copied:\n${cmd}` : "Copy failed — select and copy manually.");
+  showToast((await copyText(cmd)) ? `Copied:\n${cmd}` : "Copy failed — select and copy manually.");
 }
 
 async function copyStop(): Promise<void> {
   const cmd = `pkill -f "server/src/index.ts"`;
-  show((await copyText(cmd)) ? `Copied:\n${cmd}` : "Copy failed — select and copy manually.");
+  showToast((await copyText(cmd)) ? `Copied:\n${cmd}` : "Copy failed — select and copy manually.");
+}
+
+/** Exact one-time install command, when the export stamp knows the checkout. */
+function installHint(): string {
+  const id = chrome.runtime?.id || "<extension-id>";
+  if (serverRoot) {
+    return (
+      `One-click Start needs the native host. Run once:\n` +
+      `sh ${serverRoot}/chrome-job-app-tracker/packages/native-host/install.sh --id ${id}`
+    );
+  }
+  return (
+    `One-click Start needs the native host.\n` +
+    `Run packages/native-host/install.sh --id ${id} from the checkout ` +
+    `(id from chrome://extensions, Developer mode).`
+  );
 }
 
 const NATIVE_HOST = "com.jobs.jat";
@@ -110,17 +150,27 @@ async function nativeCall(msg: Record<string, unknown>): Promise<unknown | null>
  * Native Start/Stop is the primary control; the copy buttons appear only
  * when the host is missing or a native call fails.
  */
+let nativeRunning = false;
+
 async function refreshNative(): Promise<void> {
   const status = (await nativeCall({ cmd: "status" })) as {
     ok?: boolean;
     running?: boolean;
   } | null;
   const works = status?.ok === true;
+  nativeRunning = works && status.running === true;
   el("native-row").hidden = !works;
   el("copy-row").hidden = works;
-  if (!works) return;
-  (el("srv-start") as HTMLButtonElement).disabled = status.running === true;
-  (el("srv-stop") as HTMLButtonElement).disabled = status.running !== true;
+  if (!works) {
+    const hint = el("host-hint");
+    hint.textContent = installHint();
+    hint.hidden = false;
+    return;
+  }
+  el("host-hint").hidden = true;
+  (el("srv-toggle") as HTMLButtonElement).textContent = nativeRunning
+    ? "Stop server"
+    : "Start server";
 }
 
 async function nativeStart(): Promise<void> {
@@ -184,9 +234,13 @@ function capitalize(s: string): string {
 
 /** Restores stored prefs and, when the tab allows it, prefills the posting. */
 async function prefill(): Promise<void> {
-  const stored = await chrome.storage.local.get(["server", "region"]);
+  const stored = await chrome.storage.local.get(["server", "region", "serverRoot"]);
   serverBaseUrl =
     typeof stored.server === "string" ? stored.server.replace(/\/$/, "") : DEFAULT_SERVER;
+  await loadRepoRoot();
+  if (!serverRoot && typeof stored.serverRoot === "string") {
+    serverRoot = stored.serverRoot;
+  }
   const storedRegion = stored.region === "us" || stored.region === "uk" ? stored.region : "ca";
 
   let tabUrl = "";
@@ -334,15 +388,20 @@ async function markApplied(): Promise<void> {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  void prefill().then(() => void checkHealth());
-  void refreshNative();
-  void renderFpList();
   (el("description") as HTMLTextAreaElement).addEventListener("input", updateCount);
   el("save").addEventListener("click", () => void save());
   el("mark-applied").addEventListener("click", () => void markApplied());
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));
-  el("srv-start").addEventListener("click", () => void nativeStart());
-  el("srv-stop").addEventListener("click", () => void nativeStop());
+  el("srv-toggle").addEventListener(
+    "click",
+    () => void (nativeRunning ? nativeStop() : nativeStart()),
+  );
+  void renderFpList();
+  void (async () => {
+    await prefill();
+    await checkHealth();
+    await refreshNative();
+  })();
   // The popup is short-lived, but while it's open keep the state honest.
   let polling = false;
   window.setInterval(() => {

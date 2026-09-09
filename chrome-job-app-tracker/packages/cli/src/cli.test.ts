@@ -168,7 +168,7 @@ describe("ja", () => {
   });
 
   it("exports a load-ready extension folder", async () => {
-    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { mkdtemp, rm, readFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const dir = await mkdtemp(path.join(tmpdir(), "jat-ext-"));
     try {
@@ -188,6 +188,8 @@ describe("ja", () => {
       ]) {
         expect(existsSync(path.join(dir, f))).toBe(true);
       }
+      const stamped = await readFile(path.join(dir, "repo-root.txt"), "utf8");
+      expect(stamped.trim()).toBe(path.dirname(trackerRoot));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
