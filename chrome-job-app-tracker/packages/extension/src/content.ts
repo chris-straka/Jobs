@@ -1,7 +1,9 @@
 import {
   APPLY_TEXT,
+  cleanText,
   isDenied,
   pickDescription,
+  pickTitle,
   postingSignals,
   type PageCandidate,
 } from "./extract.js";
@@ -48,8 +50,13 @@ export function readPosting(): Posting {
   );
   const div = largestDiv();
   if (div) candidates.push(div);
+  const og = document.querySelector("meta[property='og:title']")?.getAttribute("content") ?? "";
+  const h1 =
+    [...document.querySelectorAll("h1")]
+      .map((h) => cleanText(h.textContent ?? ""))
+      .find((t) => t.length >= 4) ?? "";
   return {
-    title: document.title,
+    title: pickTitle(h1, og, document.title),
     url: location.href,
     description: pickDescription(document.title, candidates),
   };
@@ -70,11 +77,14 @@ function removePill(): void {
 /** Fixed-position pill. `actions` is button label → handler. */
 function showPill(html: string, actions: Record<string, () => void>): void {
   removePill();
+  const dark =
+    typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
   const pill = document.createElement("div");
   pill.id = PILL_ID;
   pill.style.cssText =
     "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:320px;" +
-    "background:#fff;color:#111;border:1px solid #ccc;border-radius:8px;padding:10px 12px;" +
+    `background:${dark ? "#1e1e1e" : "#fff"};color:${dark ? "#e8e8e8" : "#111"};` +
+    `border:1px solid ${dark ? "#555" : "#ccc"};border-radius:10px;padding:10px 12px;` +
     "font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)";
   pill.innerHTML = html;
   for (const [label, fn] of Object.entries(actions)) {

@@ -4,12 +4,33 @@
     <meta charset="utf-8" />
     <title>Save job posting</title>
     <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fff;
+        --fg: #111;
+        --muted: #666;
+        --field: #fff;
+        --border: #ccc;
+        --btn: #f0f0f0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1e1e1e;
+          --fg: #e8e8e8;
+          --muted: #aaa;
+          --field: #2d2d2d;
+          --border: #555;
+          --btn: #3a3a3a;
+        }
+      }
       body {
         width: 360px;
         font:
           13px/1.4 system-ui,
           sans-serif;
         margin: 12px;
+        background: var(--bg);
+        color: var(--fg);
       }
       label {
         display: block;
@@ -18,11 +39,15 @@
       }
       input,
       select,
-      textarea,
-      button {
+      textarea {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
+        background: var(--field);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 5px 7px;
       }
       textarea {
         height: 120px;
@@ -41,13 +66,21 @@
         margin-top: 8px;
         white-space: pre-wrap;
       }
-      #count {
-        color: #666;
+      #count,
+      #track-line {
+        color: var(--muted);
         font-size: 12px;
       }
       button {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
         margin-top: 8px;
         padding: 6px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
       }
     </style>
   </head>
@@ -65,23 +98,15 @@
     <input id="company" />
     <label for="role">Role title</label>
     <input id="role" />
-    <div class="row">
-      <div>
-        <label for="track">Track</label>
-        <select id="track">
-          <option value="swe">swe</option>
-          <option value="csa">csa</option>
-        </select>
-      </div>
-      <div>
-        <label for="region">Region</label>
-        <select id="region">
-          <option value="uk">uk</option>
-          <option value="us">us</option>
-          <option value="ca">ca</option>
-        </select>
-      </div>
+    <div>
+      <label for="region">Region</label>
+      <select id="region">
+        <option value="ca">ca</option>
+        <option value="us">us</option>
+        <option value="uk">uk</option>
+      </select>
     </div>
+    <div id="track-line"></div>
     <label for="server">Capture server</label>
     <input id="server" />
     <label for="description">Posting text <span id="count"></span></label>

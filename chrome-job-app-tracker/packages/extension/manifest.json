@@ -18,18 +18,7 @@
   "background": { "service_worker": "dist/background.js" },
   "content_scripts": [
     {
-      "matches": [
-        "https://hiring.cafe/*",
-        "https://hiringcafe.com/*",
-        "https://*.greenhouse.io/*",
-        "https://*.lever.co/*",
-        "https://*.ashbyhq.com/*",
-        "https://*.workable.com/*",
-        "https://*.myworkdayjobs.com/*",
-        "https://*.brightnetwork.co.uk/*",
-        "https://www.linkedin.com/*",
-        "https://*.indeed.com/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["dist/content.js"],
       "run_at": "document_idle"
     }

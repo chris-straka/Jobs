@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { cleanText, isDenied, pickDescription, postingSignals } from "./extract.js";
+import {
+  cleanText,
+  detectTrack,
+  guessRegion,
+  isDenied,
+  pickDescription,
+  pickTitle,
+  postingSignals,
+} from "./extract.js";
 
 describe("cleanText", () => {
   it("collapses whitespace", () => {
@@ -51,5 +59,65 @@ describe("isDenied", () => {
     expect(isDenied("Jobs.Example.com", ["jobs.example.com"])).toBe(true);
     expect(isDenied("other.com", ["jobs.example.com"])).toBe(false);
     expect(isDenied("x.com", [])).toBe(false);
+  });
+
+  it("always denies aggregators that link out", () => {
+    expect(isDenied("hiring.cafe", [])).toBe(true);
+    expect(isDenied("www.hiringcafe.com", [])).toBe(true);
+    expect(isDenied("careers.pcl.com", [])).toBe(false);
+  });
+});
+
+describe("pickTitle", () => {
+  it("prefers h1 and strips the site suffix", () => {
+    expect(pickTitle("Software Developer Student", "", "Software Developer Student | PCL")).toBe(
+      "Software Developer Student",
+    );
+  });
+
+  it("resolves leading-company titles by role word", () => {
+    expect(pickTitle("", "", "PCL - Software Developer Student")).toBe(
+      "Software Developer Student",
+    );
+  });
+
+  it("keeps titles without separators whole", () => {
+    expect(pickTitle("", "", "Senior Backend Engineer (Kafka) at Acme Corp")).toBe(
+      "Senior Backend Engineer (Kafka) at Acme Corp",
+    );
+  });
+
+  it("falls back through og to document title", () => {
+    expect(pickTitle("", "Backend Engineer - Acme", "")).toBe("Backend Engineer");
+    expect(pickTitle("", "", "")).toBe("");
+  });
+});
+
+describe("detectTrack", () => {
+  it("calls analyst work csa and everything else swe", () => {
+    expect(detectTrack("Business Systems Analyst", "")).toBe("csa");
+    expect(detectTrack("Software Developer Student", "")).toBe("swe");
+    expect(detectTrack("Engineer", "works with data analysts daily")).toBe("csa");
+  });
+});
+
+describe("guessRegion", () => {
+  it("reads canadian postings", () => {
+    expect(
+      guessRegion("https://careers.pcl.com/job/x", "North American HQ in Edmonton, Alberta"),
+    ).toBe("ca");
+    expect(guessRegion("https://acme.ca/jobs/1", "come work with us")).toBe("ca");
+  });
+
+  it("reads us and uk postings", () => {
+    expect(guessRegion("https://acme.com/j", "Austin, Texas office")).toBe("us");
+    expect(guessRegion("https://acme.co.uk/j", "come work with us")).toBe("uk");
+    expect(guessRegion("https://acme.com/j", "London office, hybrid")).toBe("uk");
+  });
+
+  it("abstains on ties and silence", () => {
+    expect(guessRegion("https://acme.com/j", "remote-first, work anywhere")).toBe("");
+    expect(guessRegion("https://acme.com/j", "Toronto or London")).toBe("");
+    expect(guessRegion("not a url", "")).toBe("");
   });
 });

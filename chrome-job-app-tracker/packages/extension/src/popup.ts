@@ -1,5 +1,6 @@
 import { CaptureRequest, CaptureResponse, ResolveResponse, StatusResponse } from "@jat/shared";
 import { guessCompany } from "@jat/shared";
+import { detectTrack, guessRegion } from "./extract.js";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -150,34 +151,50 @@ async function currentTab(): Promise<chrome.tabs.Tab> {
   return tab;
 }
 
-/** Restores stored prefs and, when the tab allows it, prefills company + description. */
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/** Track line under the form. Track is auto — fix it in resume.typ if wrong. */
+function renderTrackLine(track: string): void {
+  el("track-line").textContent = `Track: ${track} (auto — fix in resume.typ if wrong)`;
+}
+
+/** Restores stored prefs and, when the tab allows it, prefills the posting. */
 async function prefill(): Promise<void> {
-  const stored = await chrome.storage.local.get(["server", "track", "region"]);
+  const stored = await chrome.storage.local.get(["server", "region"]);
   (el("server") as HTMLInputElement).value =
     typeof stored.server === "string" ? stored.server : DEFAULT_SERVER;
-  (el("track") as HTMLSelectElement).value = stored.track === "csa" ? "csa" : "swe";
-  (el("region") as HTMLSelectElement).value =
-    stored.region === "us" || stored.region === "ca" ? stored.region : "uk";
+  const storedRegion = stored.region === "us" || stored.region === "uk" ? stored.region : "ca";
 
-  let tab: chrome.tabs.Tab;
+  let tabUrl = "";
+  let title = "";
+  let description = "";
   try {
-    tab = await currentTab();
-  } catch {
-    return; // no tab access (e.g. chrome://) — manual paste mode
-  }
-  (el("company") as HTMLInputElement).value = guessCompany(tab.url ?? "");
-  try {
-    const res = (await chrome.tabs.sendMessage(tab.id!, { type: "JAT_GET_POSTING" })) as {
-      ok?: boolean;
-      posting?: { description?: string };
-    };
-    if (res?.ok && res.posting?.description) {
-      (el("description") as HTMLTextAreaElement).value = res.posting.description;
-      updateCount();
+    const tab = await currentTab();
+    tabUrl = tab.url ?? "";
+    try {
+      const res = (await chrome.tabs.sendMessage(tab.id!, { type: "JAT_GET_POSTING" })) as {
+        ok?: boolean;
+        posting?: { title?: string; description?: string };
+      };
+      if (res?.ok && res.posting) {
+        title = res.posting.title ?? "";
+        description = res.posting.description ?? "";
+      }
+    } catch {
+      // content script not on this page — user pastes manually
     }
   } catch {
-    // content script not on this page — user pastes manually
+    // no tab access (e.g. chrome://) — manual paste mode
   }
+  (el("company") as HTMLInputElement).value = capitalize(guessCompany(tabUrl));
+  (el("role") as HTMLInputElement).value = title;
+  (el("description") as HTMLTextAreaElement).value = description;
+  updateCount();
+  (el("region") as HTMLSelectElement).value =
+    guessRegion(tabUrl, `${title} ${description}`) || storedRegion;
+  renderTrackLine(detectTrack(title, description));
 }
 
 function updateCount(): void {
@@ -191,9 +208,8 @@ function updateCount(): void {
  */
 async function save(): Promise<void> {
   const server = serverBase();
-  const track = (el("track") as HTMLSelectElement).value;
   const region = (el("region") as HTMLSelectElement).value;
-  await chrome.storage.local.set({ server, track, region });
+  await chrome.storage.local.set({ server, region });
 
   let tabUrl: string;
   try {
@@ -202,13 +218,17 @@ async function save(): Promise<void> {
     show("No tab URL — paste the posting URL into the description first line? Aborted.");
     return;
   }
+  const role = (el("role") as HTMLInputElement).value.trim();
+  const description = (el("description") as HTMLTextAreaElement).value;
+  const track = detectTrack(role, description);
+  renderTrackLine(track);
   const parsed = CaptureRequest.safeParse({
     url: tabUrl,
     company: (el("company") as HTMLInputElement).value.trim(),
-    role: (el("role") as HTMLInputElement).value.trim(),
+    role,
     track,
     region,
-    description: (el("description") as HTMLTextAreaElement).value,
+    description,
   });
   if (!parsed.success) {
     show(
