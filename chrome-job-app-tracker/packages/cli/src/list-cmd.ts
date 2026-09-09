@@ -127,6 +127,7 @@ export async function listCommand(root: string, argv: string[]): Promise<void> {
       r.jobStatus,
       r.pdf,
     ]);
+    cells[0] = paint(cells[0], "dim");
     cells[5] = paint(cells[5], stageColor(r.status));
     cells[6] = paint(cells[6], stageColor(r.jobStatus));
     cells[7] = paint(cells[7], pdfColor(r.pdf));
