@@ -14,8 +14,11 @@ function show(text: string): void {
   el("status").textContent = text;
 }
 
+let serverBaseUrl = DEFAULT_SERVER;
+
+/** Fixed loopback URL; tests override it via stored prefs (no UI for this). */
 function serverBase(): string {
-  return (el("server") as HTMLInputElement).value.trim().replace(/\/$/, "");
+  return serverBaseUrl;
 }
 
 let serverOnline = false;
@@ -182,8 +185,8 @@ function capitalize(s: string): string {
 /** Restores stored prefs and, when the tab allows it, prefills the posting. */
 async function prefill(): Promise<void> {
   const stored = await chrome.storage.local.get(["server", "region"]);
-  (el("server") as HTMLInputElement).value =
-    typeof stored.server === "string" ? stored.server : DEFAULT_SERVER;
+  serverBaseUrl =
+    typeof stored.server === "string" ? stored.server.replace(/\/$/, "") : DEFAULT_SERVER;
   const storedRegion = stored.region === "us" || stored.region === "uk" ? stored.region : "ca";
 
   let tabUrl = "";
@@ -227,7 +230,7 @@ function updateCount(): void {
 async function save(): Promise<void> {
   const server = serverBase();
   const region = (el("region") as HTMLSelectElement).value;
-  await chrome.storage.local.set({ server, region });
+  await chrome.storage.local.set({ region });
 
   let tabUrl: string;
   try {
@@ -335,7 +338,6 @@ document.addEventListener("DOMContentLoaded", () => {
   void refreshNative();
   void renderFpList();
   (el("description") as HTMLTextAreaElement).addEventListener("input", updateCount);
-  (el("server") as HTMLInputElement).addEventListener("input", () => void checkHealth());
   el("save").addEventListener("click", () => void save());
   el("mark-applied").addEventListener("click", () => void markApplied());
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));

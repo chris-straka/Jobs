@@ -59,9 +59,8 @@ test("popup save creates an application through the real server", async ({ page,
     await page.locator("#role").fill("Backend Engineer");
     await page.locator("#description").fill(JD);
 
-    // Fixed server URL, no track input, copy fallback visible without a host.
-    await expect(page.locator("#server")).toBeDisabled();
-    await expect(page.locator("#server")).toHaveValue(capture.url);
+    // No server field or track input; copy fallback visible without a host.
+    await expect(page.locator("#server")).toHaveCount(0);
     await expect(page.locator("#track")).toHaveCount(0);
     await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
