@@ -18,7 +18,7 @@
       "name": "@jat/cli",
       "version": "0.1.0",
       "bin": {
-        "job-app": "src/index.ts",
+        "japp": "src/index.ts",
       },
       "dependencies": {
         "@jat/core": "^0.1.0",

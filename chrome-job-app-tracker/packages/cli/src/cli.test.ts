@@ -10,7 +10,7 @@ function run(...args: string[]): { status: number | null; out: string } {
   return { status: r.status, out: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
 }
 
-describe("job-app", () => {
+describe("japp", () => {
   it("prints help with all subcommands", () => {
     const r = run("--help");
     expect(r.status).toBe(0);

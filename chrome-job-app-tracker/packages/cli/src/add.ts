@@ -5,7 +5,7 @@ import { AppStatus, guessCompany } from "@jat/shared";
 import { ask, die, readPaste, readStdin } from "./prompt.js";
 
 export function addHelp(): string {
-  return `Usage: job-app add [job-url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk]
+  return `Usage: japp add [job-url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk]
                [-d file|-] [--root DIR]
 
 Creates applications/YYYY-MM-DD_company_role/ containing:
@@ -75,7 +75,7 @@ next — tailor it with whichever agent you're in:
   claude "tailor ${folder}/resume.typ to job.md"
   codex  "tailor ${folder}/resume.typ to job.md"
 then:
-  job-app build ${folder}`);
+  japp build ${folder}`);
 }
 
 export { allResumes, AppStatus };

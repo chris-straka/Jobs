@@ -4,7 +4,7 @@
  * aliases), sends a minimal completion, and prints only the HTTP status
  * and reply text — the key is never printed or logged.
  *
- * Usage: bun run --filter @jat/server probe  (or: job-app probe)
+ * Usage: bun run --filter @jat/server probe  (or: japp probe)
  */
 import { loadTrackerEnv } from "./repo.js";
 import { modelConfigFromEnv } from "./model.js";
