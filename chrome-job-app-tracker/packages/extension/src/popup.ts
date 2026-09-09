@@ -242,7 +242,7 @@ async function save(): Promise<void> {
   const lines = [
     `Saved ${folder}`,
     `Build: ${buildOk ? "ok, one page" : "FAILED — see terminal"}`,
-    `Best fit: ${fit.projects.map((p) => `${p.id} (${p.score})`).join(", ") || "none"}`,
+    `Best match: ${fit.projects.map((p) => `${p.id} (${p.score})`).join(", ") || "none"}`,
     `Gaps: ${fit.gaps.slice(0, 8).join(", ") || "none"}`,
   ];
   if (draft.written) {

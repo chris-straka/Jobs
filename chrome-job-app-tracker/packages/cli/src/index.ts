@@ -24,9 +24,10 @@ function sparse(root: string): string {
   status    move an application (csv + job.md)
   server    start the local capture server
   probe     verify the model wiring
+  help      full flags and defaults
 
-applications: ${path.join(root, "applications")}
-ja --help for flags and defaults; manual: ${manual}`;
+(${path.join(root, "applications")})
+(${manual})`;
 }
 
 function help(): string {

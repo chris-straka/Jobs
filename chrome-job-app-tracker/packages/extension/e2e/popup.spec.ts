@@ -49,7 +49,7 @@ test("popup save creates an application through the real server", async ({ page,
     await expect(page.locator("#status")).toContainText(/Saved applications\//, {
       timeout: 30000,
     });
-    await expect(page.locator("#status")).toContainText("Best fit: telemetry");
+    await expect(page.locator("#status")).toContainText("Best match: telemetry");
 
     const apps = await readdir(path.join(dir, "applications"));
     expect(apps).toHaveLength(1);

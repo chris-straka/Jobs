@@ -44,10 +44,11 @@ describe("ja", () => {
     for (const cmd of ["add", "build", "list", "status", "server", "probe"]) {
       expect(bare.out).toContain(cmd);
     }
-    expect(bare.out).toContain("ja --help");
-    expect(bare.out).toContain("README.md");
+    expect(bare.out).toContain("full flags and defaults");
     expect(bare.out).toContain("Create a new job application");
-    expect(bare.out).toContain("applications:");
+    expect(bare.out).toContain("(/");
+    expect(bare.out).toContain("applications)");
+    expect(bare.out).toContain("README.md)");
     expect(bare.out.startsWith("\n")).toBe(true);
     expect(bare.out).not.toContain("8765");
     expect(bare.out).not.toContain("one CLI");
