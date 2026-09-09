@@ -1,0 +1,28 @@
+{
+  "name": "chrome-job-app-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Click-to-capture companion for the Jobs repo: MV3 extension + local server",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "bun run --filter @jat/shared typecheck && bun run --filter @jat/server typecheck && bun run --filter @jat/extension typecheck",
+    "build": "bun run typecheck && bun run --filter @jat/extension build",
+    "test": "bun run --filter @jat/shared test && bun run --filter @jat/server test && bun run --filter @jat/extension test",
+    "lint": "eslint packages",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "server": "bun run --filter @jat/server start"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "bun-types": "^1.4.2",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.1"
+  }
+}

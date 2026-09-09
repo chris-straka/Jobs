@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Save job posting</title>
+    <style>
+      body {
+        width: 360px;
+        font:
+          13px/1.4 system-ui,
+          sans-serif;
+        margin: 12px;
+      }
+      label {
+        display: block;
+        margin: 8px 0 2px;
+        font-weight: 600;
+      }
+      input,
+      select,
+      textarea,
+      button {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+      }
+      textarea {
+        height: 120px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row > div {
+        flex: 1;
+      }
+      #status {
+        margin-top: 8px;
+        white-space: pre-wrap;
+      }
+      #count {
+        color: #666;
+        font-size: 12px;
+      }
+      button {
+        margin-top: 8px;
+        padding: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <label for="company">Company</label>
+    <input id="company" />
+    <label for="role">Role title</label>
+    <input id="role" />
+    <div class="row">
+      <div>
+        <label for="track">Track</label>
+        <select id="track">
+          <option value="swe">swe</option>
+          <option value="csa">csa</option>
+        </select>
+      </div>
+      <div>
+        <label for="region">Region</label>
+        <select id="region">
+          <option value="uk">uk</option>
+          <option value="us">us</option>
+          <option value="ca">ca</option>
+        </select>
+      </div>
+    </div>
+    <label for="server">Capture server</label>
+    <input id="server" />
+    <label for="description">Posting text <span id="count"></span></label>
+    <textarea id="description"></textarea>
+    <button id="save" type="button">Save to Jobs repo</button>
+    <div id="status"></div>
+    <script src="dist/popup.js"></script>
+  </body>
+</html>

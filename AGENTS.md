@@ -15,7 +15,9 @@ content/         master bullet library — single source of truth,
 templates/       lib.typ — the renderer, all layout lives here
 applications/    YYYY-MM-DD_company_role/ — job.md, resume.typ, chris-straka-resume.pdf, notes.md
 applications.csv tracker
-bin/             add-job (scaffold), build.sh (compile + page check)
+bin/             add-job (scaffold), build.sh (compile + page check), list (tracker + drift check)
+chrome-job-app-tracker/  optional MV3 extension + local server; captures into the
+                 same folders via bin/add-job — never edit scaffolding in two places
 ```
 
 ## Commands

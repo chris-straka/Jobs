@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Job Application Tracker",
+  "version": "0.1.0",
+  "description": "Capture the posting in the current tab into the Jobs repo via the local capture server.",
+  "action": { "default_popup": "popup.html", "default_title": "Save job posting" },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://hiring.cafe/*",
+        "https://hiringcafe.com/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.workable.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.brightnetwork.co.uk/*",
+        "https://www.linkedin.com/*",
+        "https://*.indeed.com/*"
+      ],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

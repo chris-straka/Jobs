@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# List tracked applications with artifact + status-drift checks.
+#
+# Columns come from applications.csv. Two checks per row:
+#   pdf    ok (built and newer than resume.typ) / stale / missing
+#   drift  warns when the job.md front-matter status differs from the CSV
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+python3 - "$ROOT" <<'EOF'
+import csv, os, re, sys
+
+root = sys.argv[1]
+csv_path = os.path.join(root, "applications.csv")
+
+try:
+    fh = open(csv_path, newline="")
+except FileNotFoundError:
+    print("no applications yet — nothing tracked")
+    sys.exit(0)
+
+rows = list(csv.DictReader(fh))
+if not rows:
+    print("no applications yet — nothing tracked")
+    sys.exit(0)
+
+print(f"{'date':<10} {'company':<12} {'role':<24} {'trk':<3} {'rg':<2} {'csv':<7} {'job':<7} {'pdf':<7}")
+warnings = []
+for r in rows:
+    folder = os.path.join(root, r["folder"])
+    typ = os.path.join(folder, "resume.typ")
+    pdf = os.path.join(folder, "chris-straka-resume.pdf")
+    job = os.path.join(folder, "job.md")
+
+    if not os.path.isfile(typ):
+        pdf_state = "no-typ"
+    elif not os.path.isfile(pdf):
+        pdf_state = "missing"
+        warnings.append(f"{r['folder']}: resume.pdf missing — run bin/build.sh {r['folder']}")
+    elif os.path.getmtime(typ) > os.path.getmtime(pdf):
+        pdf_state = "stale"
+        warnings.append(f"{r['folder']}: resume.typ newer than pdf — rebuild before sending")
+    else:
+        pdf_state = "ok"
+
+    job_status = "-"
+    try:
+        with open(job) as f:
+            m = re.search(r"^status:\s*(\S+)", f.read(), re.M)
+            if m:
+                job_status = m.group(1)
+    except FileNotFoundError:
+        warnings.append(f"{r['folder']}: job.md missing")
+
+    if job_status != "-" and job_status != r["status"]:
+        warnings.append(
+            f"{r['folder']}: status drift (csv={r['status']}, job.md={job_status})"
+        )
+
+    print(
+        f"{r['date']:<10} {r['company'][:12]:<12} {r['role'][:24]:<24} "
+        f"{r['track']:<3} {r['region']:<2} {r['status']:<7} {job_status:<7} {pdf_state:<7}"
+    )
+
+if warnings:
+    print()
+    print("\n".join("! " + w for w in warnings))
+EOF

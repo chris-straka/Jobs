@@ -35,7 +35,9 @@ you edit.
 - `templates/lib.typ` — the renderer. All layout lives here.
 - `applications/` — the archive. `job.md` is the posting verbatim, `chris-straka-resume.pdf`
   is exactly what you sent.
-- `applications.csv` — the tracker.
+- `applications.csv` — the tracker. `bin/list` shows it with pdf + status checks.
+- `chrome-job-app-tracker/` — optional click-to-capture companion (MV3 extension
+  + local Bun server). Same folders out the other end; see its README.
 - `docs/` — source material only (project write-ups, course notes, job-board
   lists). Never compiled into a resume; background reading for tailoring.
 
