@@ -26,16 +26,30 @@ describe("ja", () => {
       "-c company",
       "-R role",
       "-t swe|csa",
-      "-r us|ca|uk",
+      "-a us|ca|uk",
       "-d file|-",
       "--root DIR",
     ]) {
       expect(add.out).toContain(flag);
     }
-    expect(add.out).toContain("prompted");
+    expect(add.out).not.toContain("-r us|ca|uk");
     const server = run("server", "--help");
     expect(server.status).toBe(0);
     expect(server.out).toContain("8765");
+  });
+
+  it("shows a sparse menu with no args and the full menu with --help", () => {
+    const bare = run();
+    expect(bare.status).toBe(0);
+    for (const cmd of ["add", "build", "list", "status", "server", "probe"]) {
+      expect(bare.out).toContain(cmd);
+    }
+    expect(bare.out).toContain("ja --help");
+    expect(bare.out).not.toContain("8765");
+    const full = run("--help");
+    expect(full.out).toContain("8765");
+    expect(full.out).toContain("-a us|ca|uk");
+    expect(full.out.length).toBeGreaterThan(bare.out.length);
   });
 
   it("rejects unknown commands", () => {

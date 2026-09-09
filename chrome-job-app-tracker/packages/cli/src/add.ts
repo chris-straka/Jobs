@@ -5,7 +5,7 @@ import { AppStatus, guessCompany } from "@jat/shared";
 import { ask, die, readPaste, readStdin } from "./prompt.js";
 
 export function addHelp(): string {
-  return `Usage: ja add [job-url] [-c company] [-R role] [-t swe|csa] [-r us|ca|uk]
+  return `Usage: ja add [job-url] [-c company] [-R role] [-t swe|csa] [-a us|ca|uk]
                [-d file|-] [--root DIR]
 
 Creates applications/YYYY-MM-DD_company_role/ containing:
@@ -14,15 +14,15 @@ Creates applications/YYYY-MM-DD_company_role/ containing:
   notes.md    recruiter, referral, interview log
 ...and appends a row to applications.csv.
 
-Flag defaults — a missing flag is prompted for, never silently defaulted,
-because a silently accepted wrong value ships a wrong resume:
-  job-url       positional; prompted when missing
-  -c company    prompted (the URL guess is shown as a hint, not a default)
-  -R role       prompted
-  -t swe|csa    prompted
-  -r us|ca|uk   prompted
-  -d file|-     posting source (default: stdin when piped, else paste + Ctrl-D)
-  --root DIR    repo root (default: $REPO_ROOT or current directory)
+Flag defaults — every value is required, so a missing flag prompts and an
+empty answer aborts instead of guessing:
+  job-url       default: prompt (required — empty aborts)
+  -c company    default: prompt (required; the URL guess is only a hint)
+  -R role       default: prompt (required)
+  -t swe|csa    default: prompt (required)
+  -a us|ca|uk   default: prompt (required)
+  -d file|-     default: stdin when piped, else paste + Ctrl-D
+  --root DIR    default: $REPO_ROOT or current directory
 
 The description is read last.`;
 }
@@ -35,7 +35,7 @@ export async function addCommand(root: string, argv: string[]): Promise<void> {
       c: { type: "string" },
       R: { type: "string" },
       t: { type: "string" },
-      r: { type: "string" },
+      a: { type: "string" },
       d: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -48,7 +48,7 @@ export async function addCommand(root: string, argv: string[]): Promise<void> {
   let company = values.c ?? "";
   let role = values.R ?? "";
   let track = values.t ?? "";
-  let region = values.r ?? "";
+  let region = values.a ?? "";
   const descFile = values.d;
 
   if (!url) url = await ask("Job URL");
