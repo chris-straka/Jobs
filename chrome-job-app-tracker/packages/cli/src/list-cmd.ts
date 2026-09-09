@@ -62,6 +62,7 @@ function pdfColor(pdf: string): string {
 }
 
 function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex -- the point is matching ESC
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
