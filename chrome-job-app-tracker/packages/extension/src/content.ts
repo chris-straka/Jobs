@@ -84,9 +84,13 @@ function showPill(html: string, actions: Record<string, () => void>): void {
   pill.style.cssText =
     "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:320px;" +
     `background:${dark ? "#1e1e1e" : "#fff"};color:${dark ? "#e8e8e8" : "#111"};` +
-    `border:1px solid ${dark ? "#555" : "#ccc"};border-radius:10px;padding:10px 12px;` +
+    `border:1px solid ${dark ? "#555" : "#ccc"};border-radius:14px;padding:12px 14px;` +
     "font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)";
-  pill.innerHTML = html;
+  const btn =
+    `background:${dark ? "#3a3a3a" : "#f0f0f0"};color:${dark ? "#e8e8e8" : "#111"};` +
+    `border:1px solid ${dark ? "#555" : "#ccc"};border-radius:9px;` +
+    "padding:4px 12px;font:inherit;cursor:pointer";
+  pill.innerHTML = `<style>#${PILL_ID} button{${btn}}</style>` + html;
   for (const [label, fn] of Object.entries(actions)) {
     pill.querySelector(`[data-act='${label}']`)?.addEventListener("click", fn);
   }
