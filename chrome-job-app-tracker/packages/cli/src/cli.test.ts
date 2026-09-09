@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), "index.ts");
+const trackerRoot = path.resolve(path.dirname(entry), "..", "..", "..");
 
 function run(...args: string[]): { status: number | null; out: string } {
   const r = spawnSync("bun", [entry, ...args], { encoding: "utf8" });
@@ -22,7 +24,7 @@ describe("ja", () => {
   it("prints help with all subcommands", () => {
     const r = run("--help");
     expect(r.status).toBe(0);
-    for (const cmd of ["add", "build", "list", "status", "server", "probe"]) {
+    for (const cmd of ["add", "build", "list", "status", "server", "probe", "extension"]) {
       expect(r.out).toContain(cmd);
     }
   });
@@ -49,7 +51,7 @@ describe("ja", () => {
   it("shows a sparse menu with no args and the full menu with --help", () => {
     const bare = run();
     expect(bare.status).toBe(0);
-    for (const cmd of ["add", "build", "list", "status", "server", "probe"]) {
+    for (const cmd of ["add", "build", "list", "status", "server", "probe", "extension"]) {
       expect(bare.out).toContain(cmd);
     }
     expect(bare.out).toContain("full flags and defaults");
@@ -159,6 +161,32 @@ describe("ja", () => {
       expect(row?.match(/applied/g)).toHaveLength(1);
       const head = r.out.split("\n").find((l) => l.includes("job.md"));
       expect(head!.indexOf("pdf")).toBeLessThan(head!.indexOf("job.md"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("exports a load-ready extension folder", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-ext-"));
+    try {
+      const help = run("extension", "--help");
+      expect(help.status).toBe(0);
+      expect(help.out).toContain("Load unpacked");
+      const r = run("--root", trackerRoot, "extension", "--out", dir);
+      expect(r.status).toBe(0);
+      expect(r.out).toContain(`extension ready: ${dir}`);
+      for (const f of [
+        "manifest.json",
+        "popup.html",
+        "dist/popup.js",
+        "dist/background.js",
+        "dist/content.js",
+        "icons/icon16.png",
+      ]) {
+        expect(existsSync(path.join(dir, f))).toBe(true);
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
