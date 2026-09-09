@@ -3,109 +3,64 @@ export interface PageCandidate {
   text: string;
 }
 
+export interface PostingSignals {
+  hasApplyButton: boolean;
+  descriptionLength: number;
+  title: string;
+}
+
+export interface SignalResult {
+  isPosting: boolean;
+  reasons: string[];
+}
+
 /** Collapse whitespace — posting text arrives with layout noise. */
 export function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** Pure pick: longest substantial candidate wins, title as fallback. */
+/** Matches clickable apply controls: "Apply now", "Easy Apply", "Submit application". */
+export const APPLY_TEXT = /appl(y|ication)|submit.*application|easy apply/i;
+
+/**
+ * Heuristic page classifier. Each signal is weak alone (your old extension
+ * proved that) — a page counts as a posting on an apply button plus
+ * substance, or on any two signals agreeing.
+ *
+ * @param s observable page signals
+ * @returns verdict plus the reasons, so false positives stay debuggable
+ */
+export function postingSignals(s: PostingSignals): SignalResult {
+  const reasons: string[] = [];
+  if (s.hasApplyButton) reasons.push("apply button");
+  if (s.descriptionLength >= 800) reasons.push("long description");
+  if (/job|career|hiring|posting|engineer|analyst|developer/i.test(s.title))
+    reasons.push("posting-like title");
+  const isPosting = (s.hasApplyButton && s.descriptionLength >= 200) || reasons.length >= 2;
+  return { isPosting, reasons };
+}
+
+/**
+ * @param host lowercase hostname, e.g. from `new URL(url).hostname`
+ * @param denyHosts hosts the user flagged via "Not a posting"
+ * @returns true when the pill must stay hidden on this host
+ */
+export function isDenied(host: string, denyHosts: string[]): boolean {
+  const h = host.toLowerCase();
+  return denyHosts.some((d) => d.toLowerCase() === h);
+}
+
+/**
+ * Pure pick: longest substantial candidate wins, title as fallback.
+ *
+ * @param title `document.title`, used when no candidate is substantial
+ * @param candidates raw text grabs with their source selector
+ * @returns whitespace-collapsed posting text (or title)
+ */
 export function pickDescription(title: string, candidates: PageCandidate[]): string {
   const texts = candidates
     .map((c) => cleanText(c.text))
     .filter((t) => t.length >= 200)
     .sort((a, b) => b.length - a.length);
   return texts[0] ?? cleanText(title);
-}
-
-function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-const GENERIC = new Set([
-  "jobs",
-  "job",
-  "job-boards",
-  "boards",
-  "careers",
-  "career",
-  "apply",
-  "application",
-  "openings",
-  "listings",
-  "positions",
-  "search",
-  "embed",
-  "view",
-  "www",
-  "en-us",
-  "en",
-  "us",
-  "o",
-  "p",
-  "d",
-  "v",
-  "j",
-  "companies",
-]);
-
-const PATH_ATS =
-  /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|jobvite\.com|pinpointhq\.com)$/;
-const HOST_ATS =
-  /(myworkdayjobs\.com|breezy\.hr|recruitee\.com|teamtailor\.com|applytojob\.com|bamboohr\.com|icims\.com|paylocity\.com)$/;
-const AGGREGATORS =
-  /(linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|dice\.com|monster\.com|wellfound\.com|builtin\.com|otta\.com|simplyhired\.com)$/;
-const SUFFIX = new Set([
-  "com",
-  "io",
-  "co",
-  "net",
-  "org",
-  "ai",
-  "dev",
-  "inc",
-  "xyz",
-  "uk",
-  "us",
-  "ca",
-  "de",
-  "fr",
-]);
-
-/**
- * Guess the company from a posting URL (mirrors bin/add-job's infer_company).
- * A hint for the popup form, never a default the user can't see — the form
- * shows it editable and add-job re-derives its own hint server-side.
- */
-export function guessCompany(rawUrl: string): string {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return "";
-  }
-  const host = url.hostname.toLowerCase();
-  const segs = url.pathname
-    .split("/")
-    .map(slug)
-    .filter((s) => s.length > 0);
-  const isId = (s: string): boolean => /^[0-9]+$/.test(s) || /^[0-9a-f]{8}-[0-9a-f]{4}/.test(s);
-  const useful = (s: string): boolean => !GENERIC.has(s) && !isId(s);
-
-  if (PATH_ATS.test(host)) return segs.find(useful) ?? "";
-  if (HOST_ATS.test(host))
-    return (
-      host
-        .split(".")
-        .map(slug)
-        .find((s) => !GENERIC.has(s)) ?? ""
-    );
-  if (AGGREGATORS.test(host)) return "";
-  const rest = host
-    .split(".")
-    .map(slug)
-    .filter((s) => !SUFFIX.has(s) && !GENERIC.has(s));
-  return rest[rest.length - 1] ?? "";
 }

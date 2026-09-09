@@ -58,5 +58,44 @@ export const CaptureResponse = z.object({
   buildOutput: z.string(),
   fit: FitReport,
   model: ModelSuggestion,
+  draft: z.object({
+    written: z.boolean(),
+    summary: z.string().nullable(),
+  }),
 });
 export type CaptureResponse = z.infer<typeof CaptureResponse>;
+
+export const HealthResponse = z.object({
+  ok: z.boolean(),
+  /** Repo root the server writes into — lets clients build their own start command. */
+  root: z.string(),
+});
+export type HealthResponse = z.infer<typeof HealthResponse>;
+
+export const AppStatus = z.enum([
+  "draft",
+  "applied",
+  "interviewing",
+  "offer",
+  "rejected",
+  "withdrawn",
+]);
+export type AppStatus = z.infer<typeof AppStatus>;
+
+/** Repo-relative folder; the pattern blocks path traversal. */
+export const StatusRequest = z.object({
+  folder: z.string().regex(/^applications\/[A-Za-z0-9_.-]+$/),
+  status: AppStatus,
+});
+export type StatusRequest = z.infer<typeof StatusRequest>;
+
+export const StatusResponse = z.object({
+  folder: z.string(),
+  status: AppStatus,
+});
+export type StatusResponse = z.infer<typeof StatusResponse>;
+
+export const ResolveResponse = z.object({
+  folder: z.string().nullable(),
+});
+export type ResolveResponse = z.infer<typeof ResolveResponse>;

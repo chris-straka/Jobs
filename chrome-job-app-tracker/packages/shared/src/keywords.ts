@@ -4,7 +4,12 @@ const STOPWORDS = new Set(
   ),
 );
 
-/** Lowercase alphanumeric tokens, stopwords and noise dropped. */
+/**
+ * Lowercase alphanumeric tokens, stopwords and noise dropped.
+ *
+ * @param text arbitrary prose (posting, bullet, title)
+ * @returns significant tokens in encounter order, duplicates kept
+ */
 export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
@@ -13,7 +18,10 @@ export function tokenize(text: string): string[] {
     .filter((t) => t.length >= 2 && !/^[0-9]+$/.test(t) && !STOPWORDS.has(t));
 }
 
-/** Token → occurrences, most frequent first. */
+/**
+ * @param text arbitrary prose
+ * @returns `[token, occurrences]` pairs, most frequent first
+ */
 export function frequencies(text: string): [string, number][] {
   const counts = new Map<string, number>();
   for (const t of tokenize(text)) counts.set(t, (counts.get(t) ?? 0) + 1);

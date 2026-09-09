@@ -1,0 +1,166 @@
+import { afterAll, describe, expect, it } from "bun:test";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { addApplication } from "./add.js";
+import { buildResumes } from "./build.js";
+import { formatRow, parseCsv } from "./csv.js";
+import { listApplications, setApplicationStatus } from "./status.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const jobsRoot = path.resolve(here, "..", "..", "..", "..");
+
+const tmpDirs: string[] = [];
+afterAll(async () => {
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+async function mkRoot(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "jat-core-"));
+  tmpDirs.push(dir);
+  await mkdir(path.join(dir, "applications"), { recursive: true });
+  return dir;
+}
+
+const INPUT = {
+  url: "https://example.com/jobs/1",
+  company: "Acme, Inc.",
+  role: 'Backend "Engineer"',
+  track: "swe",
+  region: "uk",
+  description: "A very long posting. ".repeat(10),
+};
+
+describe("csv", () => {
+  it("round-trips commas and quotes", () => {
+    const row = {
+      date: "2026-09-09",
+      company: "Acme, Inc.",
+      role: 'Backend "Engineer"',
+      track: "swe",
+      region: "uk",
+      status: "draft",
+      url: "https://example.com/jobs/1",
+      folder: "applications/2026-09-09_acme-inc_backend-engineer",
+    };
+    const { rows } = parseCsv(`date,company,role,track,region,status,url,folder\n${formatRow(row)}\n`);
+    expect(rows).toEqual([row]);
+  });
+});
+
+describe("addApplication", () => {
+  it("scaffolds job.md, resume.typ, notes.md, and a CSV row", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    expect(folder).toBe("applications/2026-09-09_acme-inc_backend-engineer");
+    const job = await readFile(path.join(root, folder, "job.md"), "utf8");
+    expect(job).toContain('status: draft');
+    expect(job).toContain(`url: "${INPUT.url}"`);
+    expect(job).toContain(INPUT.description);
+    const typ = await readFile(path.join(root, folder, "resume.typ"), "utf8");
+    expect(typ).toContain('track: "swe"');
+    const csv = await readFile(path.join(root, "applications.csv"), "utf8");
+    expect(csv.split("\n")[0]).toBe("date,company,role,track,region,status,url,folder");
+    expect(csv).toContain('"Acme, Inc."');
+    expect(csv).toContain('"Backend ""Engineer"""');
+  });
+
+  it("rejects duplicates and bad input", async () => {
+    const root = await mkRoot();
+    addApplication(root, INPUT, "2026-09-09");
+    expect(() => addApplication(root, INPUT, "2026-09-09")).toThrow("already exists");
+    expect(() => addApplication(root, { ...INPUT, track: "pm" }, "2026-09-10")).toThrow(
+      "track must be",
+    );
+    expect(() => addApplication(root, { ...INPUT, description: "  " }, "2026-09-10")).toThrow(
+      "empty",
+    );
+  });
+});
+
+describe("setApplicationStatus", () => {
+  it("moves csv + job.md together and restores byte-identical", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    const jobBefore = await readFile(path.join(root, folder, "job.md"), "utf8");
+    const csvBefore = await readFile(path.join(root, "applications.csv"), "utf8");
+    expect(setApplicationStatus(root, folder, "applied")).toEqual({ old: "draft" });
+    expect((await readFile(path.join(root, folder, "job.md"), "utf8")).includes("status: applied")).toBe(
+      true,
+    );
+    expect(setApplicationStatus(root, folder, "draft")).toEqual({ old: "applied" });
+    expect(await readFile(path.join(root, folder, "job.md"), "utf8")).toBe(jobBefore);
+    expect(await readFile(path.join(root, "applications.csv"), "utf8")).toBe(csvBefore);
+  });
+
+  it("fails on unknown folders", async () => {
+    const root = await mkRoot();
+    expect(() => setApplicationStatus(root, "applications/nope", "applied")).toThrow("no such folder");
+  });
+});
+
+describe("listApplications", () => {
+  it("reports pdf state and drift", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    let listed = listApplications(root);
+    expect(listed.rows[0].pdf).toBe("missing");
+    expect(listed.warnings.join("\n")).toContain("missing");
+
+    await writeFile(path.join(root, folder, "chris-straka-resume.pdf"), "fake");
+    listed = listApplications(root);
+    expect(listed.rows[0].pdf).toBe("ok");
+
+    await writeFile(path.join(root, folder, "resume.typ"), "newer");
+    listed = listApplications(root);
+    expect(listed.rows[0].pdf).toBe("stale");
+  });
+});
+
+describe("buildResumes", () => {
+  it("reports missing targets without invoking typst", () => {
+    const r = buildResumes(jobsRoot, ["applications/does-not-exist"], () => {
+      throw new Error("typst must not run");
+    });
+    expect(r.ok).toBe(false);
+    expect(r.lines.join("\n")).toContain("MISSING");
+  });
+
+  it("gates TODO bullets and counts pages from fixture files", async () => {
+    const root = await mkRoot();
+    await cp(path.join(jobsRoot, "content"), path.join(root, "content"), { recursive: true });
+    const dir = path.join(root, "applications", "2026-09-09_acme_x");
+    await mkdir(dir, { recursive: true });
+    const typ = path.join(dir, "resume.typ");
+    const pdf = path.join(dir, "chris-straka-resume.pdf");
+    const clean = () => buildResumes(root, [dir], () => ({ status: 0, output: "" }));
+
+    await writeFile(typ, '(id: "telemetry", bullets: ("gitops"))\n');
+    const todo = clean();
+    expect(todo.ok).toBe(false);
+    expect(todo.lines.join("\n")).toContain('TODO');
+    expect(todo.lines.join("\n")).toContain("gitops");
+
+    await writeFile(typ, "plain\n");
+    await writeFile(pdf, "fake /Count 2 pdf");
+    const pages = clean();
+    expect(pages.ok).toBe(false);
+    expect(pages.lines.join("\n")).toContain("PAGES");
+
+    await writeFile(pdf, "fake /Count 1 pdf");
+    const ok = clean();
+    expect(ok.ok).toBe(true);
+    expect(ok.lines.join("\n")).toContain("ok");
+  });
+
+  it("compiles a real scaffolded resume to one page", async () => {
+    const root = await mkRoot();
+    await cp(path.join(jobsRoot, "content"), path.join(root, "content"), { recursive: true });
+    await cp(path.join(jobsRoot, "templates"), path.join(root, "templates"), { recursive: true });
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    const r = buildResumes(root, [folder]);
+    expect(r.lines.join("\n")).toContain("ok");
+    expect(r.ok).toBe(true);
+  }, 120000);
+});

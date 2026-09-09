@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { cleanText, guessCompany, pickDescription } from "./extract.js";
+import { cleanText, isDenied, pickDescription, postingSignals } from "./extract.js";
 
 describe("cleanText", () => {
   it("collapses whitespace", () => {
@@ -23,23 +23,34 @@ describe("pickDescription", () => {
   });
 });
 
-describe("guessCompany", () => {
-  it("reads the company from ATS paths", () => {
-    expect(guessCompany("https://job-boards.greenhouse.io/intersystems/jobs/7827897003")).toBe(
-      "intersystems",
+describe("postingSignals", () => {
+  it("fires on apply button plus substance", () => {
+    expect(postingSignals({ hasApplyButton: true, descriptionLength: 500, title: "Acme" })).toEqual(
+      { isPosting: true, reasons: ["apply button"] },
     );
   });
 
-  it("reads the company from ATS hostnames", () => {
-    expect(guessCompany("https://acme.wd1.myworkdayjobs.com/en-US/careers")).toBe("acme");
+  it("fires on two weak signals agreeing", () => {
+    const r = postingSignals({ hasApplyButton: false, descriptionLength: 900, title: "Careers" });
+    expect(r.isPosting).toBe(true);
+    expect(r.reasons).toEqual(["long description", "posting-like title"]);
   });
 
-  it("reads the registrable name from careers sites", () => {
-    expect(guessCompany("https://careers.acme.co.uk/search")).toBe("acme");
-  });
-
-  it("refuses to guess on aggregators and garbage", () => {
-    expect(guessCompany("https://www.linkedin.com/jobs/view/123")).toBe("");
-    expect(guessCompany("not a url")).toBe("");
+  it("stays quiet on a bare apply button or a bare long page", () => {
+    expect(
+      postingSignals({ hasApplyButton: true, descriptionLength: 50, title: "Home" }).isPosting,
+    ).toBe(false);
+    expect(
+      postingSignals({ hasApplyButton: false, descriptionLength: 900, title: "Home" }).isPosting,
+    ).toBe(false);
   });
 });
+
+describe("isDenied", () => {
+  it("matches hosts case-insensitively", () => {
+    expect(isDenied("Jobs.Example.com", ["jobs.example.com"])).toBe(true);
+    expect(isDenied("other.com", ["jobs.example.com"])).toBe(false);
+    expect(isDenied("x.com", [])).toBe(false);
+  });
+});
+

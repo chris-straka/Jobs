@@ -19,6 +19,11 @@ const TOP_GAPS = 20;
  * Deterministic fit: which library projects cover the posting's vocabulary,
  * and which posting keywords appear nowhere in the library (gaps).
  * No model involved — same input always yields same output.
+ *
+ * @param description the posting text
+ * @param library projects with their bullet texts
+ * @returns top {@link TOP_PROJECTS} projects by vocabulary coverage plus the
+ * top {@link TOP_GAPS} uncovered posting keywords by frequency
  */
 export function analyzeFit(description: string, library: LibraryProject[]): FitReport {
   const jdFreq = frequencies(description);

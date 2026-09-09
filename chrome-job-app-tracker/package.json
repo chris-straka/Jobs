@@ -8,9 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "bun run --filter @jat/shared typecheck && bun run --filter @jat/server typecheck && bun run --filter @jat/extension typecheck",
+    "typecheck": "bun run --filter @jat/shared typecheck && bun run --filter @jat/server typecheck && bun run --filter @jat/extension typecheck && bun run --filter @jat/native-host typecheck",
     "build": "bun run typecheck && bun run --filter @jat/extension build",
-    "test": "bun run --filter @jat/shared test && bun run --filter @jat/server test && bun run --filter @jat/extension test",
+    "test": "bun run --filter @jat/shared test && bun run --filter @jat/server test && bun run --filter @jat/extension test && bun run --filter @jat/native-host test",
     "lint": "eslint packages",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
