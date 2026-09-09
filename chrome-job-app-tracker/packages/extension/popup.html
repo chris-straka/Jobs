@@ -23,20 +23,17 @@
           --btn: #3a3a3a;
         }
       }
-      html {
-        background: transparent;
-      }
+      /* NOTE: transparent html + body radius does NOT round the popup
+         window on macOS Chrome (verified by screenshot) — the frame is
+         drawn by the browser. Everything inside is rounded instead. */
       body {
         width: 360px;
         font:
           13px/1.4 system-ui,
           sans-serif;
-        margin: 0;
-        padding: 12px;
+        margin: 12px;
         background: var(--bg);
         color: var(--fg);
-        border-radius: 16px;
-        overflow: hidden;
       }
       label {
         display: block;
