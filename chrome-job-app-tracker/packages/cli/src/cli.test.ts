@@ -45,7 +45,9 @@ describe("ja", () => {
       expect(bare.out).toContain(cmd);
     }
     expect(bare.out).toContain("ja --help");
+    expect(bare.out).toContain("README.md");
     expect(bare.out).not.toContain("8765");
+    expect(bare.out).not.toContain("one CLI");
     const full = run("--help");
     expect(full.out).toContain("8765");
     expect(full.out).toContain("-a us|ca|uk");

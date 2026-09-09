@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { allResumes, buildResumes } from "@jat/core";
 import { AppStatus } from "@jat/shared";
@@ -11,17 +13,18 @@ import pkg from "../package.json" with { type: "json" };
 
 const COMMANDS = ["add", "build", "list", "status", "server", "probe"] as const;
 
-function sparse(): string {
-  return `ja v${(pkg as { version: string }).version} — one CLI for the Jobs repo
-
-  add       scaffold an application folder
+function sparse(root: string): string {
+  const manual = existsSync(path.join(root, "chrome-job-app-tracker", "README.md"))
+    ? path.join(root, "chrome-job-app-tracker", "README.md")
+    : path.join(root, "README.md");
+  return `  add       scaffold an application folder
   build     compile resumes (default: all)
   list      tracker table + drift warnings
   status    move an application (csv + job.md)
   server    start the local capture server
   probe     verify the model wiring
 
-ja --help for flags and defaults.`;
+ja --help for flags and defaults; manual: ${manual}`;
 }
 
 function help(): string {
@@ -59,7 +62,7 @@ async function main(): Promise<void> {
   const { root, rest } = rootFrom(process.argv.slice(2));
   const [cmd, ...args] = rest;
   if (!cmd) {
-    console.log(sparse());
+    console.log(sparse(root));
     return;
   }
   if (cmd === "help" || cmd === "--help" || cmd === "-h") {
