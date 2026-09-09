@@ -43,9 +43,10 @@ bun install          # once
 bun run server       # localhost:8765, root defaults to the Jobs checkout
 ```
 
-Load the extension: `ja extension` copies a load-ready folder to
-`~/Downloads/jat-extension`; then `chrome://extensions` → Developer mode →
-Load unpacked → that folder. Open a posting, click the extension, confirm, Save.
+Load the extension: `chrome://extensions` → Developer mode → Load unpacked →
+`packages/extension` in this checkout (run `bun run dev` there while iterating).
+Open a posting, click the extension, confirm, Save. `ja extension` makes a
+disposable copy in `~/Downloads` instead.
 
 Useful scripts (from `chrome-job-app-tracker/`):
 
