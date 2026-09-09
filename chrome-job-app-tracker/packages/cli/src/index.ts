@@ -27,7 +27,8 @@ function sparse(root: string): string {
   help      full flags and defaults
 
 ${path.join(root, "applications")}
-${manual}`;
+${manual}
+`;
 }
 
 function help(): string {
