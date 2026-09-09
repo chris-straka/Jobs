@@ -26,8 +26,8 @@ function sparse(root: string): string {
   probe     verify the model wiring
   help      full flags and defaults
 
-(${path.join(root, "applications")})
-(${manual})`;
+${path.join(root, "applications")}
+${manual}`;
 }
 
 function help(): string {
