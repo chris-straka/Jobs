@@ -82,7 +82,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
     await expect(page.locator("#jat-pill")).toContainText("Save this job?");
     await expect(page.locator("#jat-pill")).toContainText("apply button");
 
-    // "Not a posting" hides the pill and records this host.
+    // "False positive" hides the pill and records this host.
     await page.locator("#jat-pill button[data-act='no']").click();
     await expect(page.locator("#jat-pill")).toHaveCount(0);
     const store = await page.evaluate(

@@ -41,7 +41,7 @@ async function checkHealth(): Promise<void> {
   try {
     const res = await fetch(`${serverBase()}/health`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      setHealth("online", "Job server online");
+      setHealth("online", "Server Online");
       serverOnline = true;
       const body = (await res.json().catch(() => null)) as { root?: unknown } | null;
       if (body && typeof body.root === "string") {
@@ -49,11 +49,11 @@ async function checkHealth(): Promise<void> {
         await chrome.storage.local.set({ serverRoot: body.root });
       }
     } else {
-      setHealth("offline", "Job server error");
+      setHealth("offline", "Server Error");
       serverOnline = false;
     }
   } catch {
-    setHealth("offline", "Job server offline");
+    setHealth("offline", "Server Offline");
     serverOnline = false;
   }
   refreshCopyButton();
@@ -139,10 +139,11 @@ async function nativeCall(msg: Record<string, unknown>): Promise<unknown | null>
 }
 
 /**
- * Native Start/Stop is the primary control; the copy buttons appear only
+ * Native Start/Stop lives on the status pill; the copy button appears only
  * when the host is missing or a native call fails.
  */
 let nativeRunning = false;
+let nativeWorks = false;
 
 async function refreshNative(): Promise<void> {
   const status = (await nativeCall({ cmd: "status" })) as {
@@ -150,8 +151,11 @@ async function refreshNative(): Promise<void> {
     running?: boolean;
   } | null;
   const works = status?.ok === true;
+  nativeWorks = works;
   nativeRunning = works && status.running === true;
-  el("native-row").hidden = !works;
+  const pill = el("health") as HTMLButtonElement;
+  pill.disabled = !works;
+  el("health-action").textContent = works ? (nativeRunning ? "Stop server" : "Start server") : "";
   el("copy-row").hidden = works;
   if (!works) {
     const hint = el("host-hint");
@@ -160,9 +164,15 @@ async function refreshNative(): Promise<void> {
     return;
   }
   el("host-hint").hidden = true;
-  (el("srv-toggle") as HTMLButtonElement).textContent = nativeRunning
-    ? "Stop server"
-    : "Start server";
+}
+
+/** The dashboard is an extension page: list, add, and remove ignored hosts. */
+async function openDashboard(): Promise<void> {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+  } catch {
+    showToast("Couldn't open the dashboard tab.");
+  }
 }
 
 /**
@@ -416,10 +426,11 @@ document.addEventListener("DOMContentLoaded", () => {
   el("save").addEventListener("click", () => void save());
   el("mark-applied").addEventListener("click", () => void markApplied());
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));
-  el("srv-toggle").addEventListener(
-    "click",
-    () => void (nativeRunning ? nativeStop() : nativeStart()),
-  );
+  el("health").addEventListener("click", () => {
+    if (!nativeWorks) return;
+    void (nativeRunning ? nativeStop() : nativeStart());
+  });
+  el("open-dashboard").addEventListener("click", () => void openDashboard());
   void renderFpList();
   void (async () => {
     await prefill();

@@ -19,7 +19,7 @@ installed for the loaded extension, skipping when it is already set up.
 plus a tab reload to pick changes up.`;
 }
 
-const EXPORT_FILES = ["manifest.json", "popup.html", "dist", "icons"];
+const EXPORT_FILES = ["manifest.json", "popup.html", "dashboard.html", "dist", "icons"];
 
 function buildExtension(tracker: string): void {
   const build = spawnSync("bun", ["run", "--filter", "@jat/extension", "build"], {

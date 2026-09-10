@@ -77,7 +77,7 @@ const BUILT_IN_DENIED = /(hiring\.cafe|hiringcafe\.com)$/;
 
 /**
  * @param host lowercase hostname, e.g. from `new URL(url).hostname`
- * @param denyHosts hosts the user flagged via "Not a posting"
+ * @param denyHosts hosts the user flagged via "False positive"
  * @returns true when the pill must stay hidden on this host
  */
 export function isDenied(host: string, denyHosts: string[]): boolean {

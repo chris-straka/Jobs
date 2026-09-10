@@ -81,7 +81,7 @@ test("popup save creates an application through the real server", async ({ page,
     expect(csv).toContain('"draft"');
 
     // Mark applied resolves this tab's URL and moves csv + job.md together.
-    await expect(page.locator("#health")).toContainText("Job server online");
+    await expect(page.locator("#health")).toContainText("Server Online");
     await page.locator("#mark-applied").click();
     await expect(page.locator("#status")).toContainText(/Marked applied/, { timeout: 15000 });
     const csv2 = await readFile(path.join(dir, "applications.csv"), "utf8");
@@ -97,15 +97,15 @@ test("popup save creates an application through the real server", async ({ page,
     // ...start cmd once offline.
     capture.stop();
     await page.reload();
-    await expect(page.locator("#health")).toContainText("Job server offline");
+    await expect(page.locator("#health")).toContainText("Server Offline");
     await page.locator("#copy-srv").click();
     await expect(page.locator("#toast")).toContainText("Copied:");
     const startCmd = await page.evaluate(() => navigator.clipboard.readText());
     expect(startCmd).toContain("bun run server");
     expect(startCmd).toContain(dir);
 
-    // No native host here: native buttons hide, copy button carries the load.
-    await expect(page.locator("#native-row")).toBeHidden();
+    // No native host here: the pill toggle disables, copy button carries the load.
+    await expect(page.locator("#health")).toBeDisabled();
     await expect(page.locator("#copy-srv")).toBeVisible();
   } finally {
     site.close();
@@ -157,17 +157,19 @@ test("native toggle starts and stops the server through the host", async ({ page
   const site = await startStatic(pkgDir);
   try {
     await page.goto(`${site.url}/popup.html`);
-    await expect(page.locator("#srv-toggle")).toBeVisible();
-    await expect(page.locator("#srv-toggle")).toHaveText("Start server");
+    // Base health text depends on ambient port state; the action label
+    // comes from the mocked host and is deterministic.
+    await expect(page.locator("#health")).toContainText("Start server");
+    await expect(page.locator("#health")).toBeEnabled();
     await expect(page.locator("#copy-row")).toBeHidden();
 
-    await page.locator("#srv-toggle").click();
+    await page.locator("#health").click();
     await expect(page.locator("#status")).toContainText("Server starting");
-    await expect(page.locator("#srv-toggle")).toHaveText("Stop server");
+    await expect(page.locator("#health")).toContainText("Stop server");
 
-    await page.locator("#srv-toggle").click();
+    await page.locator("#health").click();
     await expect(page.locator("#status")).toContainText("Server stopped");
-    await expect(page.locator("#srv-toggle")).toHaveText("Start server");
+    await expect(page.locator("#health")).toContainText("Start server");
 
     const calls = await page.evaluate(
       () => (window as unknown as { __jatCalls?: string[] }).__jatCalls ?? [],

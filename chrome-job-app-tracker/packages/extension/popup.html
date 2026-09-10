@@ -51,7 +51,7 @@
         background: var(--bg);
         color: var(--fg);
       }
-      /* Header: status pill left, toggle pinned right. */
+      /* Header: the status pill doubles as the Start/Stop toggle. */
       .topbar {
         display: flex;
         align-items: center;
@@ -62,13 +62,50 @@
         display: inline-flex;
         align-items: center;
         gap: 7px;
+        font: inherit;
         font-size: 12px;
         font-weight: 600;
         padding: 5px 11px;
         border-radius: 999px;
         background: var(--panel);
+        color: var(--fg);
         border: 1px solid var(--border);
         white-space: nowrap;
+        cursor: pointer;
+        margin-top: 0;
+        width: auto;
+        transition:
+          border-color 0.15s ease,
+          filter 0.15s ease;
+      }
+      .pill:hover:not(:disabled) {
+        filter: brightness(1.08);
+        border-color: var(--btn-border);
+      }
+      .pill:disabled {
+        cursor: default;
+      }
+      /* Hover swaps the state label for the action label. */
+      .pill .swap {
+        display: grid;
+      }
+      .pill .swap > * {
+        grid-area: 1 / 1;
+        transition:
+          opacity 0.18s ease,
+          translate 0.18s ease;
+      }
+      #health-action {
+        opacity: 0;
+        translate: 0 5px;
+      }
+      .pill:hover:not(:disabled) #health-action {
+        opacity: 1;
+        translate: 0 0;
+      }
+      .pill:hover:not(:disabled) #health-text {
+        opacity: 0;
+        translate: 0 -5px;
       }
       #health-dot {
         width: 8px;
@@ -91,16 +128,10 @@
           opacity: 0.35;
         }
       }
-      #native-row {
-        margin-left: auto;
-      }
-      #srv-toggle {
-        width: auto;
-        margin-top: 0;
-        padding: 5px 14px;
+      #open-dashboard {
+        margin-top: 6px;
+        padding: 5px 12px;
         font-size: 12px;
-        font-weight: 600;
-        border-radius: 999px;
       }
       /* Empty state replaces the form when nothing was detected. */
       #empty-state {
@@ -296,10 +327,10 @@
   </head>
   <body>
     <div class="topbar">
-      <div id="health" class="pill pending">
-        <span id="health-dot"></span><span id="health-text">Checking server…</span>
-      </div>
-      <div id="native-row" hidden><button id="srv-toggle" type="button">Start server</button></div>
+      <button id="health" class="pill pending" type="button" disabled>
+        <span id="health-dot"></span>
+        <span class="swap"><span id="health-text">Checking server…</span><span id="health-action"></span></span>
+      </button>
     </div>
     <div id="copy-row"><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
     <div id="host-hint" class="hint" hidden></div>
@@ -338,6 +369,7 @@
       <summary>Ignored sites (<span id="fp-count">0</span>)</summary>
       <ul id="fp-list"></ul>
     </details>
+    <button id="open-dashboard" type="button">Manage ignored sites</button>
     <script src="dist/popup.js"></script>
   </body>
 </html>

@@ -124,7 +124,7 @@ function reminderPill(reasons: string[]): void {
     `<div><b>Save this job?</b> (${reasons.join(" + ")})<br/>` +
       `Click the extension icon to capture it.</div>` +
       `<div style="margin-top:8px;display:flex;gap:8px">` +
-      `<button data-act="no">Not a posting</button>` +
+      `<button data-act="no">False positive</button>` +
       `<button data-act="x">✕</button></div>`,
     {
       no: () => {

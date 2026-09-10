@@ -199,7 +199,9 @@ describe("ja", () => {
       for (const f of [
         "manifest.json",
         "popup.html",
+        "dashboard.html",
         "dist/popup.js",
+        "dist/dashboard.js",
         "dist/background.js",
         "dist/content.js",
         "icons/icon16.png",

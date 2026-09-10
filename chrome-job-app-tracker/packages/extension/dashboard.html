@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ja — ignored sites</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fff;
+        --fg: #1b1b1b;
+        --muted: #6e6e6e;
+        --field: #fff;
+        --panel: #f4f4f3;
+        --border: #d8d8d6;
+        --btn: #efefed;
+        --btn-border: #c9c9c6;
+        --accent: #1f6feb;
+        --accent-fg: #fff;
+        --bad: #cf222e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1c1c1e;
+          --fg: #e9e9e9;
+          --muted: #9d9d9d;
+          --field: #2c2c2e;
+          --panel: #262628;
+          --border: #48484c;
+          --btn: #38383c;
+          --btn-border: #5a5a5f;
+          --accent: #4c8dff;
+          --accent-fg: #fff;
+          --bad: #f85149;
+        }
+      }
+      body {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 28px 20px;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 2px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 20px;
+      }
+      #add-form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      input {
+        font: inherit;
+        background: var(--field);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 10px;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+      }
+      button {
+        font: inherit;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 8px;
+        padding: 7px 14px;
+        cursor: pointer;
+        transition:
+          background-color 0.15s ease,
+          filter 0.15s ease;
+      }
+      button:hover {
+        filter: brightness(1.06);
+      }
+      button:active {
+        filter: brightness(0.95);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: transparent;
+        color: var(--accent-fg);
+        font-weight: 600;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      ul:empty {
+        display: none;
+      }
+      li {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        padding: 9px 12px;
+        background: var(--field);
+      }
+      li + li {
+        border-top: 1px solid var(--border);
+      }
+      li span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      li button {
+        padding: 3px 12px;
+        font-size: 12px;
+        color: var(--bad);
+      }
+      #empty-note {
+        background: var(--panel);
+        border: 1px dashed var(--btn-border);
+        border-radius: 10px;
+        padding: 16px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      #form-error {
+        color: var(--bad);
+        font-size: 12px;
+        margin: -8px 0 12px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ignored sites (<span id="dash-count">0</span>)</h1>
+    <p class="sub">
+      Hosts flagged as false positives — the capture pill never appears on them.
+    </p>
+    <form id="add-form">
+      <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
+      <button class="primary" type="submit">Ignore host</button>
+    </form>
+    <p id="form-error" hidden></p>
+    <ul id="dash-list"></ul>
+    <p id="empty-note" hidden>No ignored sites. Flag one from the capture pill's False positive button.</p>
+    <script src="dist/dashboard.js"></script>
+  </body>
+</html>
