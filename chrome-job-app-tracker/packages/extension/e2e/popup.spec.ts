@@ -194,7 +194,9 @@ test("native toggle starts and stops the server through the host", async ({ page
   await page.addInitScript(() => {
     let started = false;
     const calls: string[] = [];
-    const store: Record<string, unknown> = {};
+    // Dead port: health never answers, so the starting state is
+    // deterministic no matter what runs on the ambient :8765.
+    const store: Record<string, unknown> = { server: "http://127.0.0.1:1" };
     const fakeChrome = {
       storage: {
         local: {

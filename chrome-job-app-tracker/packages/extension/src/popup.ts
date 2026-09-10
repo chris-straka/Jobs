@@ -191,29 +191,32 @@ async function openDashboard(): Promise<void> {
   }
 }
 
-/**
- * The "Server starting…" line is stale once the server is up. It clears
- * on a delay so tests and fast readers still see it, then re-arms while
- * the server is still down (slow boots).
- */
-function clearStartingWhenOnline(remaining = 3): void {
-  window.setTimeout(() => {
-    if (!el("status").textContent?.startsWith("Server starting")) return;
-    if (serverOnline) show("");
-    else if (remaining > 1) clearStartingWhenOnline(remaining - 1);
-  }, 5000);
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 async function nativeStart(): Promise<void> {
+  // Pending until health confirms: the host reports the process alive,
+  // not the port answering, so green waits for a real /health 200.
+  setHealth("pending", "Starting server…");
   const r = (await nativeCall({ cmd: "start" })) as { ok?: boolean; reason?: string } | null;
   if (r?.ok !== true) {
     el("copy-row").hidden = false;
     show(`Start failed (${r?.reason ?? "no host"}) — copy buttons below as fallback.`);
-  } else {
-    show("Server starting…");
-    clearStartingWhenOnline();
+    await checkHealth();
+    await refreshNative();
+    return;
   }
-  await checkHealth();
+  show("Server starting…");
+  // Poll until the server answers (slow boots) instead of trusting the
+  // first check. Green clears the line; while still down it stays — a
+  // slow boot may yet answer, and the 5s poll keeps watching.
+  for (let i = 0; i < 8; i++) {
+    await checkHealth();
+    if (serverOnline) break;
+    await sleep(400);
+  }
+  if (serverOnline) show("");
   await refreshNative();
 }
 
