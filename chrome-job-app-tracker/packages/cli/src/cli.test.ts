@@ -285,6 +285,46 @@ describe("ja", () => {
     }
   });
 
+  it("ensureHost skips when the host is installed, nudges when nothing is loaded", async () => {
+    const { mkdtemp, mkdir, rm, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { ensureHost, hostInstalled } = await import("./install-host-cmd.js");
+
+    const home = await mkdtemp(path.join(tmpdir(), "jat-host-"));
+    try {
+      const cand = path.join(home, "ext");
+      await mkdir(cand, { recursive: true });
+      const browserDir = path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+      );
+      await mkdir(path.join(browserDir, "Default"), { recursive: true });
+      await writeFile(
+        path.join(browserDir, "Default", "Secure Preferences"),
+        JSON.stringify({ extensions: { settings: { abc123: { path: cand } } } }),
+      );
+      await mkdir(path.join(browserDir, "NativeMessagingHosts"), { recursive: true });
+      await writeFile(
+        path.join(browserDir, "NativeMessagingHosts", "com.jobs.jat.json"),
+        JSON.stringify({ allowed_origins: ["chrome-extension://abc123/"] }),
+      );
+
+      expect(hostInstalled(home, "abc123", "brave")).toBe(true);
+      expect(hostInstalled(home, "other-id", "brave")).toBe(false);
+      expect(hostInstalled(home, "abc123", "chrome")).toBe(false);
+
+      expect(ensureHost("/nonexistent-tracker", [cand], home)).toContain("skipped");
+      expect(ensureHost("/nonexistent-tracker", [path.join(home, "missing")], home)).toContain(
+        "not loaded yet",
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown commands", () => {
     const r = run("frobnicate");
     expect(r.status).not.toBe(0);

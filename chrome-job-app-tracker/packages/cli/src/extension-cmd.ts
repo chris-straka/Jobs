@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, rmSync, watch, writeFileSync } from "nod
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { ensureHost } from "./install-host-cmd.js";
 import { die } from "./prompt.js";
 
 export function extensionHelp(): string {
@@ -12,6 +13,8 @@ Rebuilds the extension bundle and copies a load-ready folder to
 ~/Downloads/jat-extension (or --out). Load it at chrome://extensions
 with Developer mode on, via Load unpacked. The repo stays the source
 of truth — deleting the copy only unloads it until you re-run this.
+Also ensures the native-messaging host is installed for the loaded
+extension, skipping when it is already set up.
 --watch keeps the copy in sync on every save; Chrome still needs a
 manual Reload plus a tab reload to pick changes up.`;
 }
@@ -63,16 +66,22 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
   const jobsRoot = existsSync(path.join(root, "chrome-job-app-tracker", "package.json"))
     ? root
     : path.dirname(root);
+  const candidates = [...new Set([ext, out, path.join(homedir(), "Downloads", "jat-extension")])];
+  const hostStatus = (): void => {
+    console.log(ensureHost(tracker, candidates));
+  };
   if (!values.watch) {
     buildAndExport(tracker, ext, out, jobsRoot);
     console.log(
       `extension ready: ${out}\nload it at chrome://extensions (Developer mode → Load unpacked)`,
     );
+    hostStatus();
     return;
   }
   console.log(`watching ${ext} → ${out} (Ctrl-C to stop)`);
   buildAndExport(tracker, ext, out, jobsRoot);
   console.log(`extension ready: ${out}`);
+  hostStatus();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const reexport = (): void => {
     clearTimeout(timer);

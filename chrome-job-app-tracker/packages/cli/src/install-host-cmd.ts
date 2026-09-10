@@ -10,7 +10,9 @@ export function installHostHelp(): string {
 
 Installs the native-messaging host so the popup gets one-click Start/Stop.
 Finds the loaded extension id in the browser's preferences automatically;
-pass --id when that fails (id from chrome://extensions, Developer mode).`;
+pass --id when that fails (id from chrome://extensions, Developer mode).
+ja extension runs this check automatically — this command is the explicit
+version for when the host needs reinstalling on its own.`;
 }
 
 export interface BrowserDir {
@@ -73,6 +75,60 @@ export function detectExtensionId(
   return best ? { id: best.id, browser: best.browser } : null;
 }
 
+/**
+ * Native-host manifest path. Mirrors the mapping in
+ * packages/native-host/install.sh — keep the two in sync.
+ */
+export function hostManifestPath(home: string, browser: string): string {
+  const base = path.join(home, "Library", "Application Support");
+  const profile =
+    browser === "brave"
+      ? path.join(base, "BraveSoftware", "Brave-Browser")
+      : browser === "chromium"
+        ? path.join(base, "Chromium")
+        : path.join(base, "Google", "Chrome");
+  return path.join(profile, "NativeMessagingHosts", "com.jobs.jat.json");
+}
+
+/** True when the host manifest already allows the given extension id. */
+export function hostInstalled(home: string, id: string, browser: string): boolean {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(hostManifestPath(home, browser), "utf8"));
+  } catch {
+    return false;
+  }
+  const origins = (manifest as { allowed_origins?: unknown })?.allowed_origins;
+  return Array.isArray(origins) && origins.includes(`chrome-extension://${id}/`);
+}
+
+function runInstallSh(tracker: string, id: string, browser: string): void {
+  const installSh = path.join(tracker, "packages", "native-host", "install.sh");
+  if (!existsSync(installSh)) die(`no native host checkout under ${tracker}`);
+  const r = spawnSync(installSh, ["--browser", browser, "--id", id], { stdio: "inherit" });
+  if (r.error || r.status !== 0) die("install.sh failed — see above");
+}
+
+/**
+ * Idempotent host setup for `ja extension`: detects the loaded extension,
+ * skips when the host already allows it, installs otherwise. Never dies
+ * when the extension simply isn't loaded yet — that just means the user
+ * hasn't reached the Load unpacked step.
+ *
+ * @returns a one-line status for the caller to print
+ */
+export function ensureHost(tracker: string, candidates: string[], home: string = homedir()): string {
+  const detected = detectExtensionId(candidates, browserDirs(home));
+  if (!detected) {
+    return "native host: extension not loaded yet — load it, then run ja install-host";
+  }
+  if (hostInstalled(home, detected.id, detected.browser)) {
+    return `native host ready for ${detected.id} — skipped`;
+  }
+  runInstallSh(tracker, detected.id, detected.browser);
+  return `native host installed for ${detected.id} (${detected.browser})`;
+}
+
 export async function installHostCommand(root: string, argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
@@ -93,8 +149,6 @@ export async function installHostCommand(root: string, argv: string[]): Promise<
   const tracker = existsSync(path.join(root, "chrome-job-app-tracker", "package.json"))
     ? path.join(root, "chrome-job-app-tracker")
     : root;
-  const installSh = path.join(tracker, "packages", "native-host", "install.sh");
-  if (!existsSync(installSh)) die(`no native host checkout under ${tracker}`);
   const candidates = [
     path.join(tracker, "packages", "extension"),
     path.join(homedir(), "Downloads", "jat-extension"),
@@ -109,6 +163,9 @@ export async function installHostCommand(root: string, argv: string[]): Promise<
         "ja install-host --id <id from chrome://extensions, Developer mode>",
     );
   }
-  const r = spawnSync(installSh, ["--browser", browser, "--id", id], { stdio: "inherit" });
-  if (r.error || r.status !== 0) die("install.sh failed — see above");
+  if (hostInstalled(homedir(), id, browser)) {
+    console.log(`native host ready for ${id} — skipped`);
+    return;
+  }
+  runInstallSh(tracker, id, browser);
 }
