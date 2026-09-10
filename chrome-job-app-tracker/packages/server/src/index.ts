@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import {
@@ -20,6 +20,7 @@ import {
   addApplication,
   buildResumes,
   findByUrl,
+  isPageOverflow,
   loadLibrary,
   openApplicationFolder,
   readApplicationStatus,
@@ -29,10 +30,37 @@ import {
   setApplicationStatus,
   writeFalsePositives,
 } from "@jat/core";
-import { autoDraftEnabled, buildResumeTyp } from "./draft.js";
+import type { BulletRef } from "@jat/shared";
+import { autoDraftEnabled, buildResumeTyp, dropOneBullet, TIGHT_KNOBS } from "./draft.js";
 import { suggest } from "./model.js";
 
 const BODY_LIMIT = 2 * 1024 * 1024;
+
+/**
+ * Live capture stages for the popup's progress poll. Entries are deleted
+ * when their capture finishes; stale ones (crashed client) age out on read.
+ */
+const progress = new Map<string, { stage: string; at: number }>();
+const PROGRESS_TTL_MS = 10 * 60 * 1000;
+
+function setStage(clientId: string | undefined, stage: string): void {
+  if (!clientId) return;
+  progress.set(clientId, { stage, at: Date.now() });
+}
+
+function takeStage(clientId: string | undefined): void {
+  if (!clientId) return;
+  progress.delete(clientId);
+}
+
+function readStage(clientId: unknown): string | null {
+  if (typeof clientId !== "string" || !clientId) return null;
+  const now = Date.now();
+  for (const [k, v] of progress) {
+    if (now - v.at > PROGRESS_TTL_MS) progress.delete(k);
+  }
+  return progress.get(clientId)?.stage ?? null;
+}
 
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -66,7 +94,8 @@ function json(res: http.ServerResponse, status: number, value: unknown): void {
 /**
  * Starts the capture service on loopback only (never exposed to the LAN).
  *
- * Routes: `GET /health`, `POST /api/capture` (Zod-validated), `OPTIONS`
+ * Routes: `GET /health`, `POST /api/capture` (Zod-validated),
+ * `GET /api/progress?client=` (live capture stages), `OPTIONS`
  * preflight, plus resolve/status. A capture scaffolds via `@jat/core`
  * (the same code `ja` runs), scores fit against the bullet library,
  * verifies the build, and optionally asks the model. Failures surface as
@@ -167,6 +196,16 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
         json(res, 200, readFalsePositives(root));
         return;
       }
+      if (req.method === "GET" && req.url?.startsWith("/api/progress")) {
+        const client = new URL(req.url, "http://127.0.0.1").searchParams.get("client");
+        const stage = readStage(client);
+        if (!stage) {
+          json(res, 404, { error: "unknown capture" });
+          return;
+        }
+        json(res, 200, { stage });
+        return;
+      }
       if (req.method === "POST" && req.url === "/api/capture") {
         let body: unknown;
         try {
@@ -180,48 +219,102 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           json(res, 400, { error: "invalid capture", issues: parsed.error.issues });
           return;
         }
+        const clientId = parsed.data.clientId;
         try {
+          setStage(clientId, "scaffold");
           const { folder } = addApplication(root, parsed.data);
-          const library = loadLibrary(root);
-          const fit = analyzeFit(parsed.data.description, library);
-          let build = buildResumes(root, [folder]);
-          const model = await suggest(parsed.data.description, library);
-          const draft = { written: false, summary: null as string | null };
-          if (autoDraftEnabled() && !model.disabled && model.summary && model.bullets.length > 0) {
-            try {
-              await writeFile(
-                path.join(root, folder, "resume.typ"),
-                buildResumeTyp({
-                  track: parsed.data.track,
-                  region: parsed.data.region,
-                  summary: model.summary,
-                  bullets: model.bullets,
-                  fitOrder: fit.projects.map((p) => p.id),
-                }),
-              );
-              build = buildResumes(root, [folder]);
-              draft.written = true;
-              draft.summary = model.summary;
-            } catch (err) {
-              draft.written = false;
-              console.error(
-                `auto-draft failed for ${folder}:`,
-                err instanceof Error ? err.message : err,
-              );
+          try {
+            const library = loadLibrary(root);
+            setStage(clientId, "fit");
+            const fit = analyzeFit(parsed.data.description, library);
+            setStage(clientId, "build");
+            let build = buildResumes(root, [folder]);
+            setStage(clientId, "model");
+            const model = await suggest(parsed.data.description, library);
+            const draft = { written: false, summary: null as string | null, bullets: 0 };
+            const notes = { written: false };
+            if (
+              autoDraftEnabled() &&
+              !model.disabled &&
+              model.summary &&
+              model.bullets.length > 0
+            ) {
+              setStage(clientId, "draft");
+              const fitOrder = fit.projects.map((p) => p.id);
+              const base = {
+                track: parsed.data.track,
+                region: parsed.data.region,
+                summary: model.summary,
+                fitOrder,
+              };
+              try {
+                // Knobs before cuts (per AGENTS.md): the tightened draft
+                // first, then one bullet at a time off the weakest project.
+                let bullets: BulletRef[] = model.bullets;
+                await writeFile(
+                  path.join(root, folder, "resume.typ"),
+                  buildResumeTyp({ ...base, bullets }),
+                );
+                build = buildResumes(root, [folder]);
+                if (isPageOverflow(build)) {
+                  setStage(clientId, "fit-page");
+                  await writeFile(
+                    path.join(root, folder, "resume.typ"),
+                    buildResumeTyp({ ...base, bullets }, TIGHT_KNOBS),
+                  );
+                  build = buildResumes(root, [folder]);
+                }
+                while (isPageOverflow(build) && bullets.length > 4) {
+                  bullets = dropOneBullet(bullets, fitOrder);
+                  await writeFile(
+                    path.join(root, folder, "resume.typ"),
+                    buildResumeTyp({ ...base, bullets }, TIGHT_KNOBS),
+                  );
+                  build = buildResumes(root, [folder]);
+                }
+                draft.written = true;
+                draft.summary = model.summary;
+                draft.bullets = bullets.length;
+              } catch (err) {
+                draft.written = false;
+                console.error(
+                  `auto-draft failed for ${folder}:`,
+                  err instanceof Error ? err.message : err,
+                );
+              }
             }
+            if (autoDraftEnabled() && !model.disabled && model.notes) {
+              setStage(clientId, "notes");
+              try {
+                const notesPath = path.join(root, folder, "notes.md");
+                const template = await readFile(notesPath, "utf8");
+                await writeFile(notesPath, `${template}\n${model.notes.trim()}\n`);
+                notes.written = true;
+              } catch (err) {
+                console.error(
+                  `notes failed for ${folder}:`,
+                  err instanceof Error ? err.message : err,
+                );
+              }
+            }
+            takeStage(clientId);
+            json(
+              res,
+              200,
+              CaptureResponse.parse({
+                folder,
+                buildOk: build.ok,
+                buildOutput: build.lines.join("\n"),
+                fit,
+                model,
+                draft,
+                notes,
+              }),
+            );
+          } catch (err) {
+            takeStage(clientId);
+            throw err;
           }
-          json(
-            res,
-            200,
-            CaptureResponse.parse({
-              folder,
-              buildOk: build.ok,
-              buildOutput: build.lines.join("\n"),
-              fit,
-              model,
-              draft,
-            }),
-          );
         } catch (err) {
           // Same date/company/role as a tracked application: point at it
           // instead of failing — the popup shows its saved state.

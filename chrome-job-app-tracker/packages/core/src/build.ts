@@ -36,7 +36,10 @@ export function withToolPath(): NodeJS.ProcessEnv {
   return { ...process.env, PATH: parts.join(":") };
 }
 
-export function defaultRunner(cmd: string, args: string[]): { status: number | null; output: string } {
+export function defaultRunner(
+  cmd: string,
+  args: string[],
+): { status: number | null; output: string } {
   const r = spawnSync(cmd, args, { encoding: "utf8", env: withToolPath() });
   return { status: r.status, output: `${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim() };
 }
@@ -44,6 +47,13 @@ export function defaultRunner(cmd: string, args: string[]): { status: number | n
 export interface BuildReport {
   ok: boolean;
   lines: string[];
+}
+
+/** True when the report failed only because a resume spilled past one page. */
+export function isPageOverflow(report: BuildReport): boolean {
+  if (report.ok) return false;
+  const lines = report.lines.join("\n");
+  return /^\s*\d+ PAGES /m.test(lines) && !/^\s*(MISSING|TODO|FAILED) /m.test(lines);
 }
 
 /**

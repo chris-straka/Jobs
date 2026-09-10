@@ -19,7 +19,33 @@ function esc(s: string): string {
  * bullets grouped by project. Every id was library-filtered upstream, so the
  * renderer cannot hit an unknown bullet.
  */
-export function buildResumeTyp(input: DraftInput): string {
+/** Density overrides, applied before cutting bullets (per AGENTS.md). */
+export interface DraftKnobs {
+  leading?: string;
+  bulletGap?: string;
+  sectionGap?: string;
+  projectGap?: string;
+}
+
+/** The tightened knobs a hand tailor would reach for first. */
+export const TIGHT_KNOBS: Required<DraftKnobs> = {
+  leading: "0.40em",
+  bulletGap: "5pt",
+  sectionGap: "14pt",
+  projectGap: "11pt",
+};
+
+function knobLines(knobs?: DraftKnobs): string {
+  if (!knobs) return "";
+  const args: string[] = [];
+  if (knobs.leading) args.push(`  leading: ${knobs.leading},`);
+  if (knobs.bulletGap) args.push(`  bullet-gap: ${knobs.bulletGap},`);
+  if (knobs.sectionGap) args.push(`  section-gap: ${knobs.sectionGap},`);
+  if (knobs.projectGap) args.push(`  project-gap: ${knobs.projectGap},`);
+  return args.length > 0 ? `${args.join("\n")}\n` : "";
+}
+
+export function buildResumeTyp(input: DraftInput, knobs?: DraftKnobs): string {
   const groups = new Map<string, string[]>();
   for (const b of input.bullets) {
     const list = groups.get(b.project) ?? [];
@@ -47,8 +73,32 @@ export function buildResumeTyp(input: DraftInput): string {
   projects: (
 ${projects}
   ),
-)
-`;
+${knobLines(knobs)})`;
+}
+
+/**
+ * Trim primitive for the fit loop: drops the last bullet of the
+ * lowest-ranked project holding more than one, else drops the whole
+ * lowest-ranked project. Never drops the final bullet.
+ */
+export function dropOneBullet(bullets: BulletRef[], fitOrder: string[]): BulletRef[] {
+  if (bullets.length <= 1) return bullets;
+  const rank = (p: string): number => {
+    const i = fitOrder.indexOf(p);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const projects = [...new Set(bullets.map((b) => b.project))].sort((a, b) => rank(b) - rank(a));
+  for (const p of projects) {
+    const ids = bullets.filter((b) => b.project === p);
+    if (ids.length > 1) {
+      const drop = ids[ids.length - 1];
+      return bullets.filter((b) => b !== drop);
+    }
+  }
+  // Descending rank: projects[0] is the lowest fit — drop it whole.
+  const dropProject = projects[0];
+  const kept = bullets.filter((b) => b.project !== dropProject);
+  return kept.length > 0 ? kept : bullets;
 }
 
 /** Auto-draft is the point of capture: opt out with `JAT_AUTO_DRAFT=0`. */

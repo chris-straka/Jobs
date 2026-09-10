@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DuplicateApplication, addApplication } from "./add.js";
-import { buildResumes } from "./build.js";
+import { buildResumes, isPageOverflow } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
 import {
@@ -144,7 +144,9 @@ describe("false positives", () => {
     expect(readFalsePositives(root)).toEqual({ falsePositives: [] });
     writeFalsePositives(root, { falsePositives: ["B.com ", "a.com", "a.com"] });
     expect(readFalsePositives(root)).toEqual({ falsePositives: ["a.com", "b.com"] });
-    const merged = mergeFalsePositives(readFalsePositives(root), { falsePositives: ["d.com", "a.com"] });
+    const merged = mergeFalsePositives(readFalsePositives(root), {
+      falsePositives: ["d.com", "a.com"],
+    });
     expect(merged).toEqual({ falsePositives: ["a.com", "b.com", "d.com"] });
   });
 
@@ -185,7 +187,10 @@ describe("openApplicationFolder", () => {
     expect(calls[1][1]).toContain(folder);
 
     const calls2: string[][] = [];
-    const withoutCode = (cmd: string, args: string[]): { status: number | null; output: string } => {
+    const withoutCode = (
+      cmd: string,
+      args: string[],
+    ): { status: number | null; output: string } => {
       calls2.push([cmd, ...args]);
       if (cmd === "sh") return { status: 1, output: "" };
       return { status: 0, output: "" };
@@ -244,6 +249,22 @@ describe("listApplications", () => {
     await writeFile(path.join(root, folder, "resume.typ"), "newer");
     listed = listApplications(root);
     expect(listed.rows[0].pdf).toBe("stale");
+  });
+});
+
+describe("isPageOverflow", () => {
+  it("spots page spills but not other failures", () => {
+    expect(isPageOverflow({ ok: true, lines: ["  ok       x.pdf"] })).toBe(false);
+    expect(
+      isPageOverflow({ ok: false, lines: ["  2 PAGES  x/resume.typ  <- turn down leading"] }),
+    ).toBe(true);
+    expect(
+      isPageOverflow({
+        ok: false,
+        lines: ["  2 PAGES  x/resume.typ", "  FAILED   y/resume.typ"],
+      }),
+    ).toBe(false);
+    expect(isPageOverflow({ ok: false, lines: ["  TODO     x/resume.typ"] })).toBe(false);
   });
 });
 

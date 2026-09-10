@@ -29,6 +29,7 @@ const disabled = (): ModelSuggestion => ({
   summary: null,
   bullets: [],
   gaps: [],
+  notes: null,
   raw: null,
 });
 
@@ -61,9 +62,14 @@ export async function suggest(
         role: "system",
         content:
           "You help tailor a one-page resume to a job posting. " +
-          'Reply with JSON only: {"summary": string, "bullets": [{"project": string, "id": string}], "gaps": [string]}. ' +
+          'Reply with JSON only: {"summary": string, "bullets": [{"project": string, "id": string}], "gaps": [string], "notes": string}. ' +
           "SUMMARY is 2-3 lines echoing the posting's language. BULLETS may ONLY use project/id pairs from the library below — " +
-          "never invent experience or ids. GAPS lists posting requirements nothing in the library covers.",
+          "never invent experience or ids — and choose at most 6, ranked best fit first. GAPS lists posting requirements nothing in the library covers. " +
+          "NOTES is markdown for the applicant's private notes.md with exactly these sections: " +
+          "## What's missing (posting requirements the library doesn't cover and what would close each gap), " +
+          "## Interview prep (what to expect and how to prepare, grounded in the posting), " +
+          "## Notes (anything else worth knowing before applying). " +
+          "Never invent experience in NOTES either — mark speculation as such.",
       },
       {
         role: "user",
@@ -92,6 +98,7 @@ export async function suggest(
       summary?: unknown;
       bullets?: unknown;
       gaps?: unknown;
+      notes?: unknown;
     };
     const bullets = Array.isArray(parsed.bullets) ? parsed.bullets : [];
     const kept = bullets
@@ -111,6 +118,7 @@ export async function suggest(
       gaps: Array.isArray(parsed.gaps)
         ? parsed.gaps.filter((g): g is string => typeof g === "string")
         : [],
+      notes: typeof parsed.notes === "string" && parsed.notes.trim() ? parsed.notes.trim() : null,
       raw: content.slice(0, 4000),
     };
   } catch (err) {

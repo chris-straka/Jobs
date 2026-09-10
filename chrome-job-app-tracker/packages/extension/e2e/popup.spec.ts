@@ -143,6 +143,7 @@ test("popup save creates an application through the real server", async ({ page,
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
     await expect(page.locator("#build-line")).toContainText("one page");
     await expect(page.locator("#draft-line")).toBeHidden();
+    await expect(page.locator("#notes-line")).toBeHidden();
     await expect(page.locator("#capture-form")).toBeHidden();
     await expect(page.locator("#open-saved")).toHaveAttribute(
       "href",
@@ -431,6 +432,7 @@ test("tracked posting reopens in saved state, not the form", async ({ page }) =>
     await expect(page.locator("#empty-state")).toBeHidden();
     await expect(page.locator("#build-line")).toBeHidden();
     await expect(page.locator("#draft-line")).toBeHidden();
+    await expect(page.locator("#notes-line")).toBeHidden();
     await expect(page.locator("#open-saved")).toHaveAttribute(
       "href",
       /vscode:\/\/file.*applications\//,
@@ -489,8 +491,7 @@ test("changed text at a tracked URL keeps the form with a notice", async ({ page
             },
           },
           tabs: {
-            query: (): Promise<{ id: number; url: string }[]> =>
-              Promise.resolve([{ id: 7, url }]),
+            query: (): Promise<{ id: number; url: string }[]> => Promise.resolve([{ id: 7, url }]),
             sendMessage: (): Promise<unknown> =>
               Promise.resolve({
                 ok: true,
@@ -570,8 +571,7 @@ test("saving over a different posting shows its saved state, mark off", async ({
             },
           },
           tabs: {
-            query: (): Promise<{ id: number; url: string }[]> =>
-              Promise.resolve([{ id: 7, url }]),
+            query: (): Promise<{ id: number; url: string }[]> => Promise.resolve([{ id: 7, url }]),
             sendMessage: (): Promise<unknown> =>
               Promise.resolve({
                 ok: true,
@@ -641,8 +641,7 @@ test("saving over the same posting shows its saved state, mark on", async ({ pag
             },
           },
           tabs: {
-            query: (): Promise<{ id: number; url: string }[]> =>
-              Promise.resolve([{ id: 7, url }]),
+            query: (): Promise<{ id: number; url: string }[]> => Promise.resolve([{ id: 7, url }]),
             sendMessage: (): Promise<unknown> =>
               Promise.resolve({
                 ok: true,
@@ -690,5 +689,112 @@ test("saving over the same posting shows its saved state, mark on", async ({ pag
     site.close();
     capture.stop();
     await cleanup();
+  }
+});
+
+test("save shows live capture stages, then the draft and notes lines", async ({ page }) => {
+  await page.addInitScript(
+    ({ jobUrl, description }: { jobUrl: string; description: string }) => {
+      const store: Record<string, unknown> = {};
+      const fakeChrome = {
+        storage: {
+          local: {
+            get: (keys: string[]): Promise<Record<string, unknown>> =>
+              Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+            set: (obj: Record<string, unknown>): Promise<void> => {
+              Object.assign(store, obj);
+              return Promise.resolve();
+            },
+          },
+        },
+        tabs: {
+          query: (): Promise<{ id: number; url: string }[]> =>
+            Promise.resolve([{ id: 7, url: jobUrl }]),
+          sendMessage: (): Promise<unknown> =>
+            Promise.resolve({ ok: true, posting: { title: "Staged Role", description } }),
+        },
+        runtime: {
+          sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+        },
+      };
+      let progressCalls = 0;
+      const capture = {
+        folder: "applications/2026-09-09_acme_staged-role",
+        buildOk: true,
+        buildOutput: "  ok       applications/2026-09-09_acme_staged-role/chris-straka-resume.pdf",
+        fit: { projects: [], gaps: [], libraryBullets: 0 },
+        model: {
+          disabled: false,
+          summary: "Backend engineer.",
+          bullets: [
+            { project: "telemetry", id: "arch" },
+            { project: "telemetry", id: "api-relay" },
+            { project: "telemetry", id: "ai-pipeline" },
+            { project: "dbmodel", id: "sql" },
+            { project: "dbmodel", id: "integrity" },
+          ],
+          gaps: [],
+          notes: "## Interview prep\n\nSystem design.",
+          raw: null,
+        },
+        draft: { written: true, summary: "Backend engineer.", bullets: 5 },
+        notes: { written: true },
+      };
+      const w = window as unknown as {
+        chrome?: unknown;
+        fetch?: unknown;
+        __jatProgressCalls?: () => number;
+      };
+      w.chrome = fakeChrome;
+      w.__jatProgressCalls = () => progressCalls;
+      w.fetch = async (url: unknown): Promise<unknown> => {
+        const u = String(url);
+        if (u.endsWith("/health")) {
+          return { ok: true, json: async () => ({ ok: true, root: "/tmp/fake" }) };
+        }
+        if (u.includes("/api/resolve")) {
+          return {
+            ok: true,
+            json: async () => ({ folder: null, description: null, status: null }),
+          };
+        }
+        if (u.includes("/api/progress")) {
+          progressCalls++;
+          return { ok: true, json: async () => ({ stage: progressCalls < 2 ? "model" : "notes" }) };
+        }
+        if (u.includes("/api/capture")) {
+          // Slow capture: the progress poll must visibly fire first.
+          await new Promise((r) => setTimeout(r, 900));
+          return { ok: true, json: async () => capture };
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
+    },
+    { jobUrl: "https://example.com/jobs/staged", description: JD },
+  );
+
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await page.locator("#company").fill("Acme");
+    await page.locator("#role").fill("Staged Role");
+    await page.locator("#save").click();
+
+    // The status names the live stage instead of a bare Saving….
+    await expect(page.locator("#status")).toContainText("Asking Muse Spark for bullets");
+    await expect(page.locator("#status")).toContainText("Writing interview notes");
+
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#draft-line")).toContainText("Tailored with 5 bullets");
+    await expect(page.locator("#notes-line")).toContainText("Interview notes ready in notes.md");
+    const calls = await page.evaluate(
+      () =>
+        (window as unknown as { __jatProgressCalls?: () => number }).__jatProgressCalls?.() ?? 0,
+    );
+    expect(calls).toBeGreaterThan(0);
+  } finally {
+    site.close();
   }
 });

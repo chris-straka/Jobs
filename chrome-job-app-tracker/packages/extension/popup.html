@@ -253,6 +253,11 @@
         font-size: 12px;
         color: var(--muted);
       }
+      #notes-line {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
       button {
         width: 100%;
         box-sizing: border-box;
@@ -370,7 +375,9 @@
     <div class="topbar">
       <button id="health" class="pill pending" type="button" disabled>
         <span id="health-dot"></span>
-        <span class="swap"><span id="health-text">Checking server…</span><span id="health-action"></span></span>
+        <span class="swap"
+          ><span id="health-text">Checking server…</span><span id="health-action"></span
+        ></span>
       </button>
       <button id="open-dashboard" type="button">Manage</button>
     </div>
@@ -420,6 +427,7 @@
       <p id="build-line"></p>
       <pre id="build-output" hidden></pre>
       <p id="draft-line" hidden></p>
+      <p id="notes-line" hidden></p>
       <div class="btn-row" id="result-actions"></div>
     </div>
     <div id="status"></div>

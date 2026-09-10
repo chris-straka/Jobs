@@ -14,6 +14,8 @@ export const CaptureRequest = z.object({
   track: Track,
   region: Region,
   description: z.string().min(50, "description looks empty — capture the full posting"),
+  /** Lets the caller poll GET /api/progress?client= for live stages. */
+  clientId: z.string().max(64).optional(),
 });
 export type CaptureRequest = z.infer<typeof CaptureRequest>;
 
@@ -48,6 +50,8 @@ export const ModelSuggestion = z.object({
   /** Bullet ids, filtered against the library — unknown ids are dropped. */
   bullets: z.array(BulletRef),
   gaps: z.array(z.string()),
+  /** Markdown for notes.md: missing skills, interview prep, other notes. */
+  notes: z.string().nullable(),
   raw: z.string().nullable(),
 });
 export type ModelSuggestion = z.infer<typeof ModelSuggestion>;
@@ -61,8 +65,19 @@ export const CaptureResponse = z.object({
   draft: z.object({
     written: z.boolean(),
     summary: z.string().nullable(),
+    /** Bullets in the final resume.typ — fewer than suggested after trimming. */
+    bullets: z.number(),
+  }),
+  notes: z.object({
+    written: z.boolean(),
   }),
 });
+
+/** Live capture stage for GET /api/progress?client=. */
+export const ProgressResponse = z.object({
+  stage: z.string(),
+});
+export type ProgressResponse = z.infer<typeof ProgressResponse>;
 export type CaptureResponse = z.infer<typeof CaptureResponse>;
 
 export const HealthResponse = z.object({

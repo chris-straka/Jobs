@@ -10,7 +10,7 @@ import {
   setApplicationStatus,
 } from "@jat/core";
 import { repoRoot } from "./repo.js";
-import { buildResumeTyp } from "./draft.js";
+import { TIGHT_KNOBS, buildResumeTyp, dropOneBullet } from "./draft.js";
 import { modelConfigFromEnv, suggest } from "./model.js";
 import { startServer } from "./index.js";
 
@@ -133,7 +133,48 @@ describe("model", () => {
     expect(modelConfigFromEnv({})).toBeNull();
     const lib = loadLibrary(REAL_ROOT);
     const s = await suggest(JD, lib, null);
-    expect(s).toEqual({ disabled: true, summary: null, bullets: [], gaps: [], raw: null });
+    expect(s).toEqual({
+      disabled: true,
+      summary: null,
+      bullets: [],
+      gaps: [],
+      notes: null,
+      raw: null,
+    });
+  });
+
+  it("parses bullets, gaps, and notes, dropping unknown ids", async () => {
+    const lib = loadLibrary(REAL_ROOT);
+    const canned = {
+      summary: "Backend engineer.",
+      bullets: [
+        { project: "telemetry", id: "arch" },
+        { project: "telemetry", id: "nope" },
+        { project: "nope", id: "arch" },
+        { project: "dbmodel", id: "sql" },
+      ],
+      gaps: ["Angular", 7],
+      notes:
+        "## What's missing\n\nAngular.\n\n## Interview prep\n\nLeetCode.\n\n## Notes\n\nApply fast.\n",
+    };
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(canned) } }] }),
+    })) as unknown as typeof fetch;
+    try {
+      const s = await suggest(JD, lib, { url: "http://model.test", key: "k", model: "m" });
+      expect(s.disabled).toBe(false);
+      expect(s.summary).toBe("Backend engineer.");
+      expect(s.bullets).toEqual([
+        { project: "telemetry", id: "arch" },
+        { project: "dbmodel", id: "sql" },
+      ]);
+      expect(s.gaps).toEqual(["Angular"]);
+      expect(s.notes).toContain("## Interview prep");
+    } finally {
+      globalThis.fetch = prevFetch;
+    }
   });
 
   it("accepts META_* aliases and defaults the contributor model", () => {
@@ -150,6 +191,51 @@ describe("model", () => {
     expect(modelConfigFromEnv({ MODEL_API_URL: "u", MODEL_API_KEY: "k", MODEL_NAME: "m" })).toEqual(
       { url: "u", key: "k", model: "m" },
     );
+  });
+});
+
+describe("draft fit", () => {
+  const bullets = [
+    { project: "telemetry", id: "arch" },
+    { project: "telemetry", id: "api-relay" },
+    { project: "dbmodel", id: "sql" },
+    { project: "hci", id: "prototypes" },
+  ];
+  const fitOrder = ["telemetry", "dbmodel", "hci"];
+
+  it("drops the last bullet of the lowest-ranked multi-bullet project", () => {
+    expect(dropOneBullet(bullets, fitOrder)).toEqual([
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+      { project: "hci", id: "prototypes" },
+    ]);
+  });
+
+  it("drops the whole lowest-ranked project when all hold one bullet", () => {
+    const singles = [
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+      { project: "hci", id: "prototypes" },
+    ];
+    expect(dropOneBullet(singles, fitOrder)).toEqual([
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+    ]);
+  });
+
+  it("never drops the final bullet", () => {
+    const one = [{ project: "telemetry", id: "arch" }];
+    expect(dropOneBullet(one, fitOrder)).toEqual(one);
+  });
+
+  it("renders knob overrides after the project list", () => {
+    const typ = buildResumeTyp(
+      { track: "swe", region: "ca", summary: "S.", bullets, fitOrder },
+      TIGHT_KNOBS,
+    );
+    expect(typ).toContain("  leading: 0.40em,\n");
+    expect(typ).toContain("  bullet-gap: 5pt,\n");
+    expect(typ).toContain('    (id: "telemetry", bullets: ("arch", "api-relay",)),');
   });
 });
 
@@ -336,12 +422,14 @@ describe("capture end to end", () => {
       const body = (await res.json()) as {
         folder: string;
         buildOk: boolean;
-        draft: { written: boolean; summary: null };
+        draft: { written: boolean; summary: null; bullets: number };
+        notes: { written: boolean };
       };
       expect(body.folder).toMatch(/^applications\//);
       expect(body.buildOk).toBe(true);
       // No model credentials in tests: nothing to draft with.
-      expect(body.draft).toEqual({ written: false, summary: null });
+      expect(body.draft).toEqual({ written: false, summary: null, bullets: 0 });
+      expect(body.notes).toEqual({ written: false });
       const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
         ok: boolean;
         root: string;
@@ -349,6 +437,87 @@ describe("capture end to end", () => {
       expect(health).toEqual({ ok: true, root: tmp });
     } finally {
       server.close();
+    }
+  }, 120000);
+
+  it("trims a 9-bullet draft to one page and writes model notes", async () => {
+    const tmp = await mkFixture();
+    const canned = {
+      summary: "Backend engineer with Kafka and SQL experience.",
+      bullets: [
+        { project: "telemetry", id: "arch" },
+        { project: "telemetry", id: "api-relay" },
+        { project: "telemetry", id: "ai-pipeline" },
+        { project: "telemetry", id: "ci" },
+        { project: "telemetry", id: "terraform" },
+        { project: "telemetry", id: "observability" },
+        { project: "dbmodel", id: "sql" },
+        { project: "dbmodel", id: "integrity" },
+        { project: "hci", id: "prototypes" },
+      ],
+      gaps: ["Angular"],
+      notes:
+        "## What's missing\n\nAngular.\n\n## Interview prep\n\nSystem design.\n\n## Notes\n\nApply fast.\n",
+    };
+    process.env.MODEL_API_URL = "http://model.test";
+    process.env.MODEL_API_KEY = "k";
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: unknown) => {
+      if (String(url).startsWith("http://model.test")) {
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: JSON.stringify(canned) } }] }),
+          {
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      return prevFetch(url as string, init as RequestInit);
+    }) as typeof fetch;
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      // Unknown clients have no stage.
+      const missing = await fetch(`${base}/api/progress?client=nope`);
+      expect(missing.status).toBe(404);
+      const res = await fetch(`${base}/api/capture`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: "https://example.com/jobs/44",
+          company: "Acme",
+          role: "Backend Engineer",
+          track: "swe",
+          region: "uk",
+          description: JD,
+          clientId: "test-client-1",
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        folder: string;
+        buildOk: boolean;
+        draft: { written: boolean; bullets: number };
+        notes: { written: boolean };
+      };
+      expect(body.buildOk).toBe(true);
+      expect(body.draft.written).toBe(true);
+      // Nine suggested, fewer kept: the loop cut to fit one page.
+      expect(body.draft.bullets).toBeLessThan(9);
+      expect(body.draft.bullets).toBeGreaterThanOrEqual(4);
+      expect(body.notes).toEqual({ written: true });
+      const notesMd = await readFile(path.join(tmp, body.folder, "notes.md"), "utf8");
+      expect(notesMd).toContain("# Acme — Backend Engineer");
+      expect(notesMd).toContain("## Interview prep");
+      // Finished captures leave no stage behind.
+      const gone = await fetch(`${base}/api/progress?client=test-client-1`);
+      expect(gone.status).toBe(404);
+    } finally {
+      server.close();
+      globalThis.fetch = prevFetch;
+      delete process.env.MODEL_API_URL;
+      delete process.env.MODEL_API_KEY;
     }
   }, 120000);
 });

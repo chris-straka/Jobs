@@ -171,11 +171,7 @@ async function refreshNative(): Promise<void> {
   nativeRunning = works && status.running === true;
   const pill = el("health") as HTMLButtonElement;
   pill.disabled = !works;
-  el("health-action").textContent = works
-    ? nativeRunning
-      ? "Stop server?"
-      : "Start server?"
-    : "";
+  el("health-action").textContent = works ? (nativeRunning ? "Stop server?" : "Start server?") : "";
   el("copy-row").hidden = works;
   if (!works) {
     const hint = el("host-hint");
@@ -414,6 +410,7 @@ function showSavedState(folder: string, markEnabled = true): void {
   el("build-line").hidden = true;
   el("build-output").hidden = true;
   el("draft-line").hidden = true;
+  el("notes-line").hidden = true;
   el("result-actions").prepend(el("mark-applied"));
   const mark = el("mark-applied") as HTMLButtonElement;
   mark.disabled = !markEnabled;
@@ -432,8 +429,9 @@ function showResult(
   folder: string,
   buildOk: boolean,
   buildOutput: string,
-  model: { disabled: boolean; bullets: { project: string; id: string }[] },
-  draft: { written: boolean },
+  model: { disabled: boolean },
+  draft: { written: boolean; bullets: number },
+  notes: { written: boolean },
 ): void {
   el("capture-form").hidden = true;
   el("empty-state").hidden = true;
@@ -451,8 +449,15 @@ function showResult(
   } else {
     draftLine.hidden = false;
     draftLine.textContent = draft.written
-      ? `Tailored with ${model.bullets.length} bullets — review resume.typ before sending`
+      ? `Tailored with ${draft.bullets} bullets — review resume.typ before sending`
       : "Auto-draft failed — tailor resume.typ by hand";
+  }
+  const notesLine = el("notes-line");
+  if (notes.written) {
+    notesLine.hidden = false;
+    notesLine.textContent = "Interview notes ready in notes.md";
+  } else {
+    notesLine.hidden = true;
   }
   el("result-actions").prepend(el("mark-applied"));
   // Failed saves stay unmarked: nothing is ready to send.
@@ -478,6 +483,58 @@ async function conflictMatches(
 ): Promise<boolean> {
   const known = await resolvePosting(tabUrl);
   return !!known && known.folder === folder && samePostingText(description, known.description);
+}
+
+/** Human labels for the server's capture stages. Unknown stages keep quiet. */
+function stageLabel(stage: string): string | null {
+  switch (stage) {
+    case "scaffold":
+      return "Saving posting…";
+    case "fit":
+      return "Scoring project fit…";
+    case "build":
+      return "Building default resume…";
+    case "model":
+      return "Asking Muse Spark for bullets…";
+    case "draft":
+      return "Drafting tailored resume…";
+    case "fit-page":
+      return "Fitting one page…";
+    case "notes":
+      return "Writing interview notes…";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Polls the server's live capture stage while the POST is in flight.
+ * Never overwrites the final result: the caller stops the loop first.
+ */
+function pollProgress(server: string, clientId: string): () => void {
+  let stopped = false;
+  const tick = async (): Promise<void> => {
+    if (stopped) return;
+    try {
+      const res = await fetch(`${server}/api/progress?client=${encodeURIComponent(clientId)}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { stage?: unknown };
+        const label = typeof body.stage === "string" ? stageLabel(body.stage) : null;
+        if (label && !stopped) show(label);
+      }
+    } catch {
+      // Server busy or gone — the capture POST is the source of truth.
+    }
+    if (!stopped) {
+      window.setTimeout(() => void tick(), 700);
+    }
+  };
+  void tick();
+  return () => {
+    stopped = true;
+  };
 }
 
 /**
@@ -519,16 +576,22 @@ async function save(): Promise<void> {
   saving = true;
   const saveBtn = el("save") as HTMLButtonElement;
   saveBtn.disabled = true;
+  const clientId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : String(Date.now());
   show("Saving…");
+  const stopProgress = pollProgress(server, clientId);
   let res: Response;
   try {
     res = await fetch(`${server}/api/capture`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(parsed.data),
+      body: JSON.stringify({ ...parsed.data, clientId }),
       signal: AbortSignal.timeout(180000),
     });
   } catch (err) {
+    stopProgress();
     show(
       err instanceof Error && err.name === "AbortError"
         ? "Capture timed out — the model may still be working; check the repo."
@@ -538,6 +601,7 @@ async function save(): Promise<void> {
     saveBtn.disabled = false;
     return;
   }
+  stopProgress();
   const body = (await res.json()) as unknown;
   if (!res.ok) {
     // Lost the race (stale form, double save): the folder is the truth
@@ -565,10 +629,10 @@ async function save(): Promise<void> {
     saveBtn.disabled = false;
     return;
   }
-  const { folder, buildOk, buildOutput, model, draft } = out.data;
+  const { folder, buildOk, buildOutput, model, draft, notes } = out.data;
   saving = false;
   saveBtn.disabled = false;
-  showResult(folder, buildOk, buildOutput, model, draft);
+  showResult(folder, buildOk, buildOutput, model, draft, notes);
 }
 
 async function markApplied(): Promise<void> {
