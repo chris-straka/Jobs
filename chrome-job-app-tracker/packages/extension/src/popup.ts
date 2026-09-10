@@ -429,8 +429,8 @@ function showResult(
   folder: string,
   buildOk: boolean,
   buildOutput: string,
-  model: { disabled: boolean },
-  draft: { written: boolean; bullets: number },
+  model: { disabled: boolean; raw: string | null },
+  draft: { written: boolean; bullets: number; elapsedMs: number },
   notes: { written: boolean },
 ): void {
   el("capture-form").hidden = true;
@@ -449,8 +449,8 @@ function showResult(
   } else {
     draftLine.hidden = false;
     draftLine.textContent = draft.written
-      ? `Tailored with ${draft.bullets} bullets — review resume.typ before sending`
-      : "Auto-draft failed — tailor resume.typ by hand";
+      ? `Tailored with ${draft.bullets} bullets in ${formatElapsed(draft.elapsedMs)} — review resume.typ before sending`
+      : `Tailoring failed — ${shortReason(model.raw)}`;
   }
   const notesLine = el("notes-line");
   if (notes.written) {
@@ -485,6 +485,22 @@ async function conflictMatches(
   return !!known && known.folder === folder && samePostingText(description, known.description);
 }
 
+/** First line of the failure record, or a fallback when there is none. */
+function shortReason(raw: string | null): string {
+  const first = (raw ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  return (first ?? "no output").slice(0, 160);
+}
+
+/** 83s, 1m 23s — the result receipt. */
+function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
 /** Human labels for the server's capture stages. Unknown stages keep quiet. */
 function stageLabel(stage: string): string | null {
   switch (stage) {
@@ -504,6 +520,14 @@ function stageLabel(stage: string): string | null {
       return "Writing interview notes…";
     case "agent":
       return "Muse Spark is tailoring…";
+    case "agent-think":
+      return "Muse Spark is thinking…";
+    case "agent-read":
+      return "Reading bullet library…";
+    case "agent-write":
+      return "Writing resume draft…";
+    case "agent-run":
+      return "Running commands…";
     default:
       return null;
   }

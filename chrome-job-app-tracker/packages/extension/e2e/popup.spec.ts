@@ -737,7 +737,7 @@ test("save shows live capture stages, then the draft and notes lines", async ({ 
           notes: "## Interview prep\n\nSystem design.",
           raw: null,
         },
-        draft: { written: true, summary: "Backend engineer.", bullets: 5 },
+        draft: { written: true, summary: "Backend engineer.", bullets: 5, elapsedMs: 83000 },
         notes: { written: true },
       };
       const w = window as unknown as {
@@ -787,13 +787,96 @@ test("save shows live capture stages, then the draft and notes lines", async ({ 
 
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
     await expect(page.locator("#build-line")).toContainText("one page");
-    await expect(page.locator("#draft-line")).toContainText("Tailored with 5 bullets");
+    await expect(page.locator("#draft-line")).toContainText("Tailored with 5 bullets in 1m 23s");
     await expect(page.locator("#notes-line")).toContainText("Interview notes ready in notes.md");
     const calls = await page.evaluate(
       () =>
         (window as unknown as { __jatProgressCalls?: () => number }).__jatProgressCalls?.() ?? 0,
     );
     expect(calls).toBeGreaterThan(0);
+  } finally {
+    site.close();
+  }
+});
+
+test("a failed agent run names its reason instead of hand tailoring", async ({ page }) => {
+  await page.addInitScript(
+    ({ jobUrl, description }: { jobUrl: string; description: string }) => {
+      const store: Record<string, unknown> = {};
+      const fakeChrome = {
+        storage: {
+          local: {
+            get: (keys: string[]): Promise<Record<string, unknown>> =>
+              Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+            set: (obj: Record<string, unknown>): Promise<void> => {
+              Object.assign(store, obj);
+              return Promise.resolve();
+            },
+          },
+        },
+        tabs: {
+          query: (): Promise<{ id: number; url: string }[]> =>
+            Promise.resolve([{ id: 7, url: jobUrl }]),
+          sendMessage: (): Promise<unknown> =>
+            Promise.resolve({ ok: true, posting: { title: "Failed Role", description } }),
+        },
+        runtime: {
+          sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+        },
+      };
+      const capture = {
+        folder: "applications/2026-09-09_acme_failed-role",
+        buildOk: true,
+        buildOutput: "  ok       applications/2026-09-09_acme_failed-role/chris-straka-resume.pdf",
+        fit: { projects: [], gaps: [], libraryBullets: 0 },
+        model: {
+          disabled: false,
+          summary: null,
+          bullets: [],
+          gaps: [],
+          notes: null,
+          raw: "agent timed out\nretry",
+        },
+        draft: { written: false, summary: null, bullets: 0, elapsedMs: 9000 },
+        notes: { written: false },
+      };
+      const w = window as unknown as { chrome?: unknown; fetch?: unknown };
+      w.chrome = fakeChrome;
+      w.fetch = async (url: unknown): Promise<unknown> => {
+        const u = String(url);
+        if (u.endsWith("/health")) {
+          return { ok: true, json: async () => ({ ok: true, root: "/tmp/fake" }) };
+        }
+        if (u.includes("/api/resolve")) {
+          return {
+            ok: true,
+            json: async () => ({ folder: null, description: null, status: null }),
+          };
+        }
+        if (u.includes("/api/progress")) {
+          return { ok: false, json: async () => ({}) };
+        }
+        if (u.includes("/api/capture")) {
+          return { ok: true, json: async () => capture };
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
+    },
+    { jobUrl: "https://example.com/jobs/failed", description: JD },
+  );
+
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await page.locator("#company").fill("Acme");
+    await page.locator("#role").fill("Failed Role");
+    await page.locator("#save").click();
+
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#draft-line")).toContainText("Tailoring failed — agent timed out");
+    await expect(page.locator("#draft-line")).not.toContainText("by hand");
+    await expect(page.locator("#notes-line")).toBeHidden();
   } finally {
     site.close();
   }

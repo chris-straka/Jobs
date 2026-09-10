@@ -221,6 +221,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           return;
         }
         const clientId = parsed.data.clientId;
+        const started = Date.now();
         try {
           setStage(clientId, "scaffold");
           const { folder } = addApplication(root, parsed.data);
@@ -230,7 +231,12 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
             const fit = analyzeFit(parsed.data.description, library);
             setStage(clientId, "build");
             let build = buildResumes(root, [folder]);
-            const draft = { written: false, summary: null as string | null, bullets: 0 };
+            const draft = {
+              written: false,
+              summary: null as string | null,
+              bullets: 0,
+              elapsedMs: 0,
+            };
             const notes = { written: false };
             let model: ModelSuggestion;
             if (agentEnabled() && autoDraftEnabled()) {
@@ -329,6 +335,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
                 );
               }
             }
+            draft.elapsedMs = Date.now() - started;
             takeStage(clientId);
             json(
               res,

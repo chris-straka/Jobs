@@ -67,6 +67,8 @@ export const CaptureResponse = z.object({
     summary: z.string().nullable(),
     /** Bullets in the final resume.typ — fewer than suggested after trimming. */
     bullets: z.number(),
+    /** Whole-capture wall time for the result receipt. */
+    elapsedMs: z.number(),
   }),
   notes: z.object({
     written: z.boolean(),

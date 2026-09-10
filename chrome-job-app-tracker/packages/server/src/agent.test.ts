@@ -10,6 +10,7 @@ import {
   buildAgentPrompt,
   countDraftBullets,
   runAgentTailor,
+  stageFromEvent,
 } from "./agent.js";
 
 const tmpDirs: string[] = [];
@@ -83,6 +84,54 @@ describe("agent tailoring", () => {
     });
     expect(stages).toEqual(["agent"]);
     expect(run).toEqual({ draftWritten: true, bullets: 2, notesWritten: true, raw: "done\n" });
+  });
+
+  it("maps observed event shapes to stages, ignoring reminders", () => {
+    const proposed = (task_kind: string): unknown => ({
+      payload: { kind: "x", event: { kind: "proposed", task_kind } },
+    });
+    expect(stageFromEvent({ payload: { kind: "run_started" } })).toBe("agent");
+    expect(stageFromEvent(proposed("tool.read_file"))).toBe("agent-read");
+    expect(stageFromEvent(proposed("tool.write_file"))).toBe("agent-write");
+    expect(stageFromEvent(proposed("tool.edit_file"))).toBe("agent-write");
+    expect(stageFromEvent(proposed("tool.bash"))).toBe("agent-run");
+    expect(stageFromEvent(proposed("model.meta.response"))).toBe("agent-think");
+    expect(stageFromEvent(proposed("reminder.agent.skill-reminder"))).toBeNull();
+    expect(stageFromEvent(proposed("tool.unknown_future"))).toBeNull();
+    expect(stageFromEvent({})).toBeNull();
+    expect(stageFromEvent(null)).toBeNull();
+  });
+
+  it("streams deltas into raw text and event stages", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "jat-agent-json-"));
+    tmpDirs.push(tmp);
+    const folder = "applications/2026-09-09_acme_x";
+    await mkdir(path.join(tmp, folder), { recursive: true });
+    await writeFile(path.join(tmp, folder, "notes.md"), "# Acme — X\n");
+    const stages: string[] = [];
+    const run = await runAgentTailor({
+      root: tmp,
+      folder,
+      track: "swe",
+      region: "ca",
+      fitOrder: [],
+      knownBullets: ["arch"],
+      onStage: (s) => void stages.push(s),
+      env: {},
+      spawnFn: async (_bin, _args, opts) => {
+        // A --json stdout: deltas become raw, tool events become stages.
+        opts.onJsonLine?.({ payload: { kind: "run_output_delta", text: "tailoring " } });
+        opts.onJsonLine?.({
+          payload: { kind: "x", event: { kind: "proposed", task_kind: "tool.write_file" } },
+        });
+        opts.onJsonLine?.({ payload: { kind: "run_output_delta", text: "done" } });
+        await writeFile(path.join(tmp, folder, "resume.typ"), '(bullets: ("arch",))');
+        return { exitCode: 0, timedOut: false, stdout: "", stderr: "" };
+      },
+    });
+    expect(run.raw).toBe("tailoring done");
+    expect(stages).toEqual(["agent", "agent-write"]);
+    expect(run.draftWritten).toBe(true);
   });
 
   it("reports failure when the agent exits nonzero", async () => {

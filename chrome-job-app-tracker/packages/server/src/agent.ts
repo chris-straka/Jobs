@@ -57,21 +57,42 @@ export interface AgentResult {
 export type SpawnFn = (
   bin: string,
   args: string[],
-  opts: { cwd: string; timeoutMs: number },
+  opts: { cwd: string; timeoutMs: number; onJsonLine?: (obj: unknown) => void },
 ) => Promise<AgentResult>;
 
 const OUTPUT_CAP = 32768;
 const cap = (s: string): string => (s.length > OUTPUT_CAP ? s.slice(-OUTPUT_CAP) : s);
 
+/**
+ * Mid-run stage from one `--json` event. Observed task kinds: tool.read_file,
+ * tool.write_file, tool.bash, model.meta.response (reminder.* is ignored).
+ * Unknown shapes stay quiet — the popup keeps its last label.
+ */
+export function stageFromEvent(obj: unknown): string | null {
+  if (typeof obj !== "object" || obj === null) return null;
+  const payload = (obj as { payload?: unknown }).payload as
+    { kind?: unknown; event?: { kind?: unknown; task_kind?: unknown } } | undefined;
+  if (payload?.kind === "run_started") return "agent";
+  const ev = payload?.event;
+  if (!ev || ev.kind !== "proposed" || typeof ev.task_kind !== "string") return null;
+  const k = ev.task_kind;
+  if (k.startsWith("tool.read")) return "agent-read";
+  if (k.startsWith("tool.write") || k.startsWith("tool.edit")) return "agent-write";
+  if (k.startsWith("tool.bash") || k.includes("shell")) return "agent-run";
+  if (k.includes("model")) return "agent-think";
+  return null;
+}
+
 export function defaultSpawn(
   bin: string,
   args: string[],
-  opts: { cwd: string; timeoutMs: number },
+  opts: { cwd: string; timeoutMs: number; onJsonLine?: (obj: unknown) => void },
 ): Promise<AgentResult> {
   return new Promise((resolve) => {
     let finished = false;
     let stdout = "";
     let stderr = "";
+    let lineBuf = "";
     const done = (timedOut: boolean, code: number | null): void => {
       if (finished) return;
       finished = true;
@@ -80,7 +101,21 @@ export function defaultSpawn(
     };
     const child = spawn(bin, args, { cwd: opts.cwd });
     child.stdout.on("data", (d: Buffer) => {
-      stdout = cap(stdout + d.toString());
+      const s = d.toString();
+      stdout = cap(stdout + s);
+      if (!opts.onJsonLine) return;
+      lineBuf += s;
+      const lines = lineBuf.split("\n");
+      lineBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("{")) continue;
+        try {
+          opts.onJsonLine(JSON.parse(t));
+        } catch {
+          // Not JSON — stdout stays the debug record.
+        }
+      }
     });
     child.stderr.on("data", (d: Buffer) => {
       stderr = cap(stderr + d.toString());
@@ -148,13 +183,28 @@ export async function runAgentTailor(opts: {
     "--max-model-steps",
     String(agentMaxSteps(env)),
     "--no-session-log",
+    "--json",
     prompt,
   ];
+  // Human text streamed as run_output_delta doubles as the failure record;
+  // without it (crash before any delta) the raw JSONL is the fallback.
+  let deltas = "";
+  const onJsonLine = (obj: unknown): void => {
+    if (typeof obj !== "object" || obj === null) return;
+    const payload = (obj as { payload?: unknown }).payload as
+      { kind?: unknown; text?: unknown } | undefined;
+    if (payload?.kind === "run_output_delta" && typeof payload.text === "string") {
+      deltas = cap(deltas + payload.text);
+    }
+    const stage = stageFromEvent(obj);
+    if (stage) opts.onStage(stage);
+  };
   const r = await (opts.spawnFn ?? defaultSpawn)(bin, args, {
     cwd: opts.root,
     timeoutMs: agentTimeoutMs(env),
+    onJsonLine,
   });
-  const raw = `${r.stdout}\n${r.stderr}`.slice(-4000);
+  const raw = deltas.trim() ? deltas.slice(-4000) : `${r.stdout}\n${r.stderr}`.slice(-4000);
   if (r.exitCode !== 0) return { draftWritten: false, bullets: 0, notesWritten: false, raw };
   let bullets: number;
   try {

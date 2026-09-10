@@ -385,13 +385,18 @@ describe("capture end to end", () => {
       const body = (await res.json()) as {
         folder: string;
         buildOk: boolean;
-        draft: { written: boolean; summary: null; bullets: number };
+        draft: { written: boolean; summary: null; bullets: number; elapsedMs: number };
         notes: { written: boolean };
       };
       expect(body.folder).toMatch(/^applications\//);
       expect(body.buildOk).toBe(true);
       // No model credentials in tests: nothing to draft with.
-      expect(body.draft).toEqual({ written: false, summary: null, bullets: 0 });
+      expect(body.draft).toEqual({
+        written: false,
+        summary: null,
+        bullets: 0,
+        elapsedMs: expect.any(Number),
+      });
       expect(body.notes).toEqual({ written: false });
       const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
         ok: boolean;
