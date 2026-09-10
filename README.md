@@ -59,5 +59,6 @@ This repo is safe to publish only because `.gitignore` keeps the private
 paths untracked: `applications/`, `applications.csv`, `content/`, `docs/`,
 `.agents/`. They live on this machine, not in git going forward. Do not
 delete those lines: pushing without them would publish job postings,
-resumes, and employment history. (Past commits still contain those files;
-rewriting history is a separate, deliberate job.)
+resumes, and employment history. (History was scrubbed of these paths;
+a local `backup/pre-scrub` branch keeps the originals and must never
+be pushed.)
