@@ -576,6 +576,18 @@ function pollProgress(server: string, clientId: string): () => void {
 }
 
 /**
+ * Save-row buttons while a capture is in flight: Save off, full-width
+ * Cancel on. Every save() exit restores it — including the result states,
+ * which move mark-applied elsewhere but never touch Cancel.
+ */
+function setSavingUI(savingNow: boolean): void {
+  (el("save") as HTMLButtonElement).disabled = savingNow;
+  const cancel = el("cancel-save") as HTMLButtonElement;
+  cancel.hidden = !savingNow;
+  if (!savingNow) cancel.disabled = false;
+}
+
+/**
  * Validates the form client-side, POSTs to the capture server, and renders
  * the folder, build state, fit report, and any model suggestions.
  */
@@ -612,35 +624,76 @@ async function save(): Promise<void> {
   }
   if (saving) return;
   saving = true;
-  const saveBtn = el("save") as HTMLButtonElement;
-  saveBtn.disabled = true;
+  setSavingUI(true);
   const clientId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : String(Date.now());
   show("Saving…");
   const stopProgress = pollProgress(server, clientId);
+  // Manual abort (Cancel button) replaces the fire-and-forget timeout so
+  // giving up locally also stops waiting. The 10-minute timeout stays: an
+  // unanswered run still releases the form.
+  const manual = new AbortController();
+  const manualTimeout = window.setTimeout(() => manual.abort(), 600000);
+  const cancelBtn = el("cancel-save") as HTMLButtonElement;
+  let cancelled = false;
+  cancelBtn.onclick = () => void (async () => {
+    cancelBtn.disabled = true;
+    show("Cancelling…");
+    let killed = false;
+    try {
+      const r = await fetch(`${server}/api/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clientId }),
+        signal: AbortSignal.timeout(5000),
+      });
+      killed = r.ok;
+    } catch {
+      // Server gone — killed stays false.
+    }
+    if (!killed) {
+      // Unknown capture: already finished or server gone. Keep waiting —
+      // the save itself will report.
+      cancelBtn.disabled = false;
+      show("Cancel didn't land — still saving…");
+      return;
+    }
+    cancelled = true;
+    manual.abort();
+    stopProgress();
+    window.clearTimeout(manualTimeout);
+    setSavingUI(false);
+    saving = false;
+    show("Cancelled — nothing saved.");
+  })();
   let res: Response;
   try {
     res = await fetch(`${server}/api/capture`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...parsed.data, clientId }),
-      // Outlasts the headless agent run (default 9 min server-side).
-      signal: AbortSignal.timeout(600000),
+      signal: manual.signal,
     });
   } catch (err) {
     stopProgress();
-    show(
-      err instanceof Error && err.name === "AbortError"
-        ? "Capture timed out — the model may still be working; check the repo."
-        : `Cannot reach ${server} — is the capture server running?`,
-    );
+    window.clearTimeout(manualTimeout);
+    setSavingUI(false);
     saving = false;
-    saveBtn.disabled = false;
+    // A confirmed cancel already reported the truth above; anything else
+    // is a timeout or a dead server.
+    if (!cancelled) {
+      show(
+        err instanceof Error && err.name === "AbortError"
+          ? "Capture timed out — the model may still be working; check the repo."
+          : `Cannot reach ${server} — is the capture server running?`,
+      );
+    }
     return;
   }
   stopProgress();
+  window.clearTimeout(manualTimeout);
   const body = (await res.json()) as unknown;
   if (!res.ok) {
     // Lost the race (stale form, double save): the folder is the truth
@@ -652,6 +705,7 @@ async function save(): Promise<void> {
       if (typeof conflict?.folder === "string" && conflict.folder) {
         const markEnabled = await conflictMatches(tabUrl, description, conflict.folder);
         saving = false;
+        setSavingUI(false);
         showSavedState(conflict.folder, markEnabled);
         return;
       }
@@ -663,19 +717,19 @@ async function save(): Promise<void> {
         : `Server refused it:\n${JSON.stringify(body).slice(0, 1000)}`,
     );
     saving = false;
-    saveBtn.disabled = false;
+    setSavingUI(false);
     return;
   }
   const out = CaptureResponse.safeParse(body);
   if (!out.success) {
     show("Server replied with something unexpected — check the server log.");
     saving = false;
-    saveBtn.disabled = false;
+    setSavingUI(false);
     return;
   }
   const { folder, buildOk, buildOutput, model, draft, notes } = out.data;
   saving = false;
-  saveBtn.disabled = false;
+  setSavingUI(false);
   showResult(folder, buildOk, buildOutput, model, draft, notes);
 }
 

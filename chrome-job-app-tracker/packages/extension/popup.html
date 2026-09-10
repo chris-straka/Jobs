@@ -218,6 +218,10 @@
       .btn-row button {
         margin-top: 0;
       }
+      /* Cancel spans the pair while a capture is in flight. */
+      #cancel-save {
+        grid-column: 1 / -1;
+      }
       /* Mark applied is the only result action: center it instead of
          stretching it across a two-column grid built for pairs. */
       #result-actions:has(> :only-child) {
@@ -425,6 +429,7 @@
         <button id="mark-applied" type="button" disabled title="Save this posting first">
           Mark applied ✓
         </button>
+        <button id="cancel-save" type="button" hidden>Cancel</button>
       </div>
     </div>
     <div id="result" hidden>

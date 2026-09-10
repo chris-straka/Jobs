@@ -2,6 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import {
+  CancelRequest,
+  CancelResponse,
   CaptureRequest,
   CaptureResponse,
   HealthResponse,
@@ -44,6 +46,8 @@ const BODY_LIMIT = 2 * 1024 * 1024;
  * when their capture finishes; stale ones (crashed client) age out on read.
  */
 const progress = new Map<string, { stage: string; at: number }>();
+/** In-flight agent runs by clientId, so POST /api/cancel can kill them. */
+const runs = new Map<string, AbortController>();
 const PROGRESS_TTL_MS = 10 * 60 * 1000;
 
 function setStage(clientId: string | undefined, stage: string): void {
@@ -98,7 +102,8 @@ function json(res: http.ServerResponse, status: number, value: unknown): void {
  * Starts the capture service on loopback only (never exposed to the LAN).
  *
  * Routes: `GET /health`, `POST /api/capture` (Zod-validated),
- * `GET /api/progress?client=` (live capture stages), `OPTIONS`
+ * `GET /api/progress?client=` (live capture stages),
+ * `POST /api/cancel` (kill a running capture by clientId), `OPTIONS`
  * preflight, plus resolve/status. A capture scaffolds via `@jat/core`
  * (the same code `ja` runs), scores fit against the bullet library,
  * verifies the build, and optionally asks the model. Failures surface as
@@ -209,6 +214,32 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
         json(res, 200, { stage });
         return;
       }
+      if (req.method === "POST" && req.url === "/api/cancel") {
+        let body: unknown;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          json(res, 400, { error: "invalid JSON body" });
+          return;
+        }
+        const parsed = CancelRequest.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: "invalid cancel", issues: parsed.error.issues });
+          return;
+        }
+        // Aborting resolves the run as cancelled; the capture handler's
+        // atomic-save rollback then removes the folder, so cancel leaves
+        // nothing behind. Unknown client means the run already finished
+        // (or never existed) — say so instead of claiming the kill.
+        const run = runs.get(parsed.data.clientId);
+        if (!run) {
+          json(res, 404, { error: "unknown capture" });
+          return;
+        }
+        run.abort();
+        json(res, 200, CancelResponse.parse({ cancelled: true }));
+        return;
+      }
       if (req.method === "POST" && req.url === "/api/capture") {
         let body: unknown;
         try {
@@ -255,15 +286,26 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
               };
               const known: string[] = [];
               for (const p of library) for (const b of p.bullets) known.push(b.id);
-              const run = await runAgentTailor({
-                root,
-                folder,
-                track: parsed.data.track,
-                region: parsed.data.region,
-                fitOrder: fit.projects.map((p) => p.id),
-                knownBullets: known,
-                onStage: (s) => setStage(clientId, s),
-              });
+              // Registered for POST /api/cancel: aborting resolves the run
+              // as cancelled, and the atomic-save check below rolls back
+              // the folder. Unregistered as soon as the run settles.
+              const agentRun = new AbortController();
+              if (clientId) runs.set(clientId, agentRun);
+              let run;
+              try {
+                run = await runAgentTailor({
+                  root,
+                  folder,
+                  track: parsed.data.track,
+                  region: parsed.data.region,
+                  fitOrder: fit.projects.map((p) => p.id),
+                  knownBullets: known,
+                  onStage: (s) => setStage(clientId, s),
+                  signal: agentRun.signal,
+                });
+              } finally {
+                if (clientId) runs.delete(clientId);
+              }
               build = buildResumes(root, [folder]);
               draft.written = run.draftWritten;
               draft.bullets = run.bullets;

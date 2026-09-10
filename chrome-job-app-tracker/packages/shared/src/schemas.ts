@@ -25,6 +25,15 @@ export const BulletRef = z.object({
 });
 export type BulletRef = z.infer<typeof BulletRef>;
 
+/** Kill a running capture by the clientId it was started with. */
+export const CancelRequest = z.object({
+  clientId: z.string().min(1).max(64),
+});
+export type CancelRequest = z.infer<typeof CancelRequest>;
+
+export const CancelResponse = z.object({ cancelled: z.boolean() });
+export type CancelResponse = z.infer<typeof CancelResponse>;
+
 export const ProjectFit = z.object({
   id: z.string(),
   name: z.string(),

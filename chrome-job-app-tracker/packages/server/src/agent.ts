@@ -92,7 +92,12 @@ export interface AgentResult {
 export type SpawnFn = (
   bin: string,
   args: string[],
-  opts: { cwd: string; timeoutMs: number; onJsonLine?: (obj: unknown) => void },
+  opts: {
+    cwd: string;
+    timeoutMs: number;
+    onJsonLine?: (obj: unknown) => void;
+    signal?: AbortSignal;
+  },
 ) => Promise<AgentResult>;
 
 const OUTPUT_CAP = 32768;
@@ -148,8 +153,16 @@ export function stageFromEvent(obj: unknown): string | null {
 export function defaultSpawn(
   bin: string,
   args: string[],
-  opts: { cwd: string; timeoutMs: number; onJsonLine?: (obj: unknown) => void },
+  opts: {
+    cwd: string;
+    timeoutMs: number;
+    onJsonLine?: (obj: unknown) => void;
+    signal?: AbortSignal;
+  },
 ): Promise<AgentResult> {
+  if (opts.signal?.aborted) {
+    return Promise.resolve({ exitCode: -1, timedOut: false, stdout: "", stderr: "cancelled" });
+  }
   return new Promise((resolve) => {
     let finished = false;
     let stdout = "";
@@ -159,9 +172,19 @@ export function defaultSpawn(
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
       resolve({ exitCode: code ?? -1, timedOut, stdout, stderr });
     };
     const child = spawn(bin, args, { cwd: opts.cwd, env: childEnv() });
+    // Cancel kills the OS process; the close handler below resolves.
+    const onAbort = (): void => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Already exited — the close handler resolves.
+      }
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (d: Buffer) => {
       const s = d.toString();
       stdout = cap(stdout + s);
@@ -224,6 +247,7 @@ export async function runAgentTailor(opts: {
   onStage: (stage: string) => void;
   spawnFn?: SpawnFn;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }): Promise<TailorRun> {
   const env = opts.env ?? process.env;
   const prompt = buildAgentPrompt({
@@ -272,11 +296,38 @@ export async function runAgentTailor(opts: {
     const stage = stageFromEvent(obj);
     if (stage) opts.onStage(stage);
   };
-  const r = await (opts.spawnFn ?? defaultSpawn)(bin, args, {
-    cwd: opts.root,
-    timeoutMs: agentTimeoutMs(env),
-    onJsonLine,
+  // Cancel wins the race even when the spawn honors no signal (fakes,
+  // hung children): the run reports cancelled and never verifies partial
+  // files — the server's atomic-save rollback removes the folder upstream.
+  const r = await new Promise<AgentResult | null>((resolve) => {
+    const signal = opts.signal;
+    if (!signal) {
+      void (opts.spawnFn ?? defaultSpawn)(bin, args, {
+        cwd: opts.root,
+        timeoutMs: agentTimeoutMs(env),
+        onJsonLine,
+      }).then(resolve);
+      return;
+    }
+    if (signal.aborted) {
+      resolve(null);
+      return;
+    }
+    const onAbort = (): void => resolve(null);
+    signal.addEventListener("abort", onAbort, { once: true });
+    void (opts.spawnFn ?? defaultSpawn)(bin, args, {
+      cwd: opts.root,
+      timeoutMs: agentTimeoutMs(env),
+      onJsonLine,
+      signal,
+    }).then((v) => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(v);
+    });
   });
+  if (r === null) {
+    return { draftWritten: false, bullets: 0, notesWritten: false, raw: "cancelled by user" };
+  }
   const raw = deltas.trim() ? deltas.slice(-4000) : `${r.stdout}\n${r.stderr}`.slice(-4000);
   if (r.exitCode !== 0) return { draftWritten: false, bullets: 0, notesWritten: false, raw };
   let bullets: number;

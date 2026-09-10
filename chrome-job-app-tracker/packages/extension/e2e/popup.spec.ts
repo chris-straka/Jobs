@@ -813,6 +813,85 @@ test("save shows live capture stages, then the draft and notes lines", async ({ 
   }
 });
 
+test("cancel stops a hanging save and frees the form", async ({ page }) => {
+  await page.addInitScript(
+    ({ jobUrl, description }: { jobUrl: string; description: string }) => {
+      const store: Record<string, unknown> = {};
+      const fakeChrome = {
+        storage: {
+          local: {
+            get: (keys: string[]): Promise<Record<string, unknown>> =>
+              Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+            set: (obj: Record<string, unknown>): Promise<void> => {
+              Object.assign(store, obj);
+              return Promise.resolve();
+            },
+          },
+        },
+        tabs: {
+          query: (): Promise<{ id: number; url: string }[]> =>
+            Promise.resolve([{ id: 7, url: jobUrl }]),
+          sendMessage: (): Promise<unknown> =>
+            Promise.resolve({ ok: true, posting: { title: "Hung Role", description } }),
+        },
+        runtime: {
+          sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+        },
+      };
+      const w = window as unknown as { chrome?: unknown; fetch?: unknown };
+      w.chrome = fakeChrome;
+      w.fetch = async (url: unknown): Promise<unknown> => {
+        const u = String(url);
+        if (u.endsWith("/health")) {
+          return { ok: true, json: async () => ({ ok: true, root: "/tmp/fake" }) };
+        }
+        if (u.includes("/api/resolve")) {
+          return {
+            ok: true,
+            json: async () => ({ folder: null, description: null, status: null }),
+          };
+        }
+        if (u.includes("/api/progress")) {
+          return { ok: false };
+        }
+        if (u.includes("/api/cancel")) {
+          return { ok: true, json: async () => ({ cancelled: true }) };
+        }
+        if (u.includes("/api/capture")) {
+          // Never settles: Cancel is the only way out.
+          await new Promise(() => {});
+          throw new Error("unreachable");
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
+    },
+    { jobUrl: "https://example.com/jobs/hung", description: JD },
+  );
+
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/popup.html`);
+    await page.locator("#company").fill("Acme");
+    await page.locator("#role").fill("Hung Role");
+    await page.locator("#save").click();
+
+    // While saving: Save off, full-width Cancel on.
+    await expect(page.locator("#cancel-save")).toBeVisible();
+    await expect(page.locator("#save")).toBeDisabled();
+    await expect(page.locator("#status")).toContainText("Saving");
+
+    await page.locator("#cancel-save").click();
+    await expect(page.locator("#status")).toContainText("Cancelled — nothing saved.");
+    // The form is free again and no result rendered.
+    await expect(page.locator("#save")).toBeEnabled();
+    await expect(page.locator("#cancel-save")).toBeHidden();
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await expect(page.locator("#result")).toBeHidden();
+  } finally {
+    site.close();
+  }
+});
+
 test("a failed agent run names its reason instead of hand tailoring", async ({ page }) => {
   await page.addInitScript(
     ({ jobUrl, description }: { jobUrl: string; description: string }) => {

@@ -180,6 +180,54 @@ describe("agent tailoring", () => {
     expect(run).toEqual({ draftWritten: true, bullets: 2, notesWritten: true, raw: "done\n" });
   });
 
+  it("reports cancelled instead of verifying when aborted", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "jat-cancel-"));
+    tmpDirs.push(tmp);
+    const stages: string[] = [];
+    const ac = new AbortController();
+    ac.abort();
+    const run = await runAgentTailor({
+      root: tmp,
+      folder: "applications/2026-09-09_acme_x",
+      track: "swe",
+      region: "ca",
+      fitOrder: [],
+      knownBullets: [],
+      onStage: (s) => void stages.push(s),
+      env: {},
+      signal: ac.signal,
+      spawnFn: () => new Promise(() => {}),
+    });
+    expect(run).toEqual({ draftWritten: false, bullets: 0, notesWritten: false, raw: "cancelled by user" });
+    // The run started (agent stage) then cancelled before any tool stages.
+    expect(stages).toEqual(["agent"]);
+  });
+
+  it("aborts a live child on signal", async () => {
+    const ac = new AbortController();
+    const pending = defaultSpawn("sleep", ["30"], {
+      cwd: tmpdir(),
+      timeoutMs: 60000,
+      signal: ac.signal,
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    ac.abort();
+    const r = await pending;
+    expect(r.exitCode).toBe(-1);
+    expect(r.timedOut).toBe(false);
+  });
+
+  it("refuses to spawn when already aborted", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const r = await defaultSpawn("sleep", ["30"], {
+      cwd: tmpdir(),
+      timeoutMs: 5000,
+      signal: ac.signal,
+    });
+    expect(r).toEqual({ exitCode: -1, timedOut: false, stdout: "", stderr: "cancelled" });
+  });
+
   it("maps observed event shapes to stages, ignoring reminders", () => {
     const proposed = (task_kind: string): unknown => ({
       payload: { kind: "x", event: { kind: "proposed", task_kind } },

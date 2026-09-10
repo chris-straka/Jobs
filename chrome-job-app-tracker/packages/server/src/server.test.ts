@@ -534,6 +534,74 @@ describe("capture end to end", () => {
     }
   }, 120000);
 
+  it("kills a running agent on cancel and rolls the folder back", async () => {
+    const tmp = await mkFixture();
+    const hangBin = path.join(tmp, "fake-muse-hang");
+    await writeFile(hangBin, "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+    delete process.env.JAT_AGENT;
+    process.env.JAT_AGENT_BIN = hangBin;
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      const cancelPayload = (clientId: string): Promise<Response> =>
+        fetch(`${base}/api/cancel`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ clientId }),
+        });
+      // Unknown clients and bad bodies never touch a run.
+      expect((await cancelPayload("nope")).status).toBe(404);
+      const bad = await fetch(`${base}/api/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(bad.status).toBe(400);
+      // Start a capture that hangs in the agent, then kill it. The run
+      // registers after scaffold/fit/build, so poll until cancel lands.
+      const capture = fetch(`${base}/api/capture`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: "https://example.com/jobs/46",
+          company: "Acme",
+          role: "Backend Engineer",
+          track: "swe",
+          region: "uk",
+          description: JD,
+          clientId: "cancel-1",
+        }),
+      });
+      let killed = false;
+      const deadline = Date.now() + 90000;
+      while (!killed && Date.now() < deadline) {
+        const r = await cancelPayload("cancel-1");
+        if (r.status === 200) {
+          expect(await r.json()).toEqual({ cancelled: true });
+          killed = true;
+        } else {
+          expect(r.status).toBe(404);
+          await new Promise((r2) => setTimeout(r2, 200));
+        }
+      }
+      expect(killed).toBe(true);
+      const res = await capture;
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toContain("cancelled by user");
+      expect(body.error).toContain("nothing saved");
+      expect(await readdir(path.join(tmp, "applications"))).toEqual([]);
+      const csv = await readFile(path.join(tmp, "applications.csv"), "utf8");
+      expect(csv.trim()).toBe("date,company,role,track,region,status,url,folder");
+    } finally {
+      server.close();
+      delete process.env.JAT_AGENT_BIN;
+      process.env.JAT_AGENT = "0";
+    }
+  }, 120000);
+
   it("keeps the save when the agent binary succeeds", async () => {
     const tmp = await mkFixture();
     const okBin = path.join(tmp, "fake-muse-ok");
