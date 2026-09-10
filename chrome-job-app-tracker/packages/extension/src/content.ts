@@ -79,7 +79,10 @@ function isChromeContainer(el: Element): boolean {
  * carriers a prompt-injecting posting would use, and exactly what the user
  * cannot catch by reading. Visible prose stays, whatever it says: telling
  * "Note to AI assistants" apart from "Note to applicants" is the sandbox's
- * and the verifier's job, not the scraper's.
+ * and the verifier's job, not the scraper's. Sub-legible type (see
+ * MIN_READABLE_PX) is handled separately in visibleText: it drops the
+ * element's own text but keeps normally-sized children, so font-size:0
+ * whitespace-trick containers survive.
  */
 function isRendered(el: Element): boolean {
   if (el.hasAttribute("hidden")) return false;
@@ -95,6 +98,20 @@ function isRendered(el: Element): boolean {
   if (!onScreen) return false;
   const style = getComputedStyle(el);
   return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+/**
+ * Sub-legible type floor in px. Text rendered below this cannot be read at
+ * 100% zoom — the user could not catch it by reading — while legit fine
+ * print (EEO, salary footnotes, req ids) runs 9px and up. Computed style
+ * resolves em/rem/% to px, so relative sizes are covered; unparsable values
+ * fail open (text kept).
+ */
+const MIN_READABLE_PX = 5;
+
+function tinyText(el: Element): boolean {
+  const px = parseFloat(getComputedStyle(el).fontSize);
+  return Number.isFinite(px) && px < MIN_READABLE_PX;
 }
 
 /**
@@ -122,10 +139,14 @@ function visibleText(el: Element, isRoot: boolean): string {
     return "";
   }
   if (!isRendered(el)) return "";
+  // The element's own direct text in sub-legible type is unreadable ink;
+  // children re-evaluate with their own sizes on recursion.
+  const illegible = tinyText(el);
   let out = "";
   for (const node of el.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) out += node.textContent ?? "";
-    else if (node.nodeType === Node.ELEMENT_NODE) out += visibleText(node as Element, false);
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!illegible) out += node.textContent ?? "";
+    } else if (node.nodeType === Node.ELEMENT_NODE) out += visibleText(node as Element, false);
   }
   return out;
 }

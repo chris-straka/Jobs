@@ -95,6 +95,10 @@ test("content script extracts the posting from the real bundle", async ({ page }
     expect(result.posting?.description).not.toContain("HIDDEN-ATTR-INJECTION");
     expect(result.posting?.description).not.toContain("OFFSCREEN-INJECTION");
     expect(result.posting?.description).not.toContain("HIDDEN-ARTICLE-INJECTION");
+    // Sub-legible type is unreadable ink; the zero-size wrapper's sized
+    // child is real text and survives.
+    expect(result.posting?.description).not.toContain("TINY-FONT-INJECTION");
+    expect(result.posting?.description).toContain("ZERO-SIZE-WRAPPER-KEPT");
 
     // Pill is three buttons and nothing else.
     await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");
