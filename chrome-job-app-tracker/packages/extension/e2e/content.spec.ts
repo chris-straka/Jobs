@@ -77,6 +77,9 @@ test("content script extracts the posting from the real bundle", async ({ page }
     // Article-only word: proves it picked the posting, not nav/footer.
     expect(result.posting?.description).toContain("exactly-once");
     expect(result.posting?.description?.length).toBeGreaterThan(500);
+    // Nav, footer, and button text are scrubbed from the description.
+    expect(result.posting?.description).not.toContain("boilerplate");
+    expect(result.posting?.description).not.toContain("Apply now");
 
     // Auto-pill fired (apply button + substance) with reasons shown.
     await expect(page.locator("#jat-pill")).toContainText("Save this job?");

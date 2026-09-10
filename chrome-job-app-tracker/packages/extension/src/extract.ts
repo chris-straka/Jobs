@@ -20,7 +20,9 @@ export function cleanText(text: string): string {
 }
 
 const CODE_REMNANT = /\$\(|jQuery|<!\[CDATA|\]\]>/;
-const BOILERPLATE_LINE = /^(opens? in a new (tab|window)\.?|skip to main content|loading\.{3})$/i;
+const BOILERPLATE_LINE =
+  /^(opens? in a new (tab|window)\.?|skip to main content|loading\.{3}|apply now\s*»?|view all jobs|find similar jobs:?\s*|create alerts?|show more options|×)$/i;
+const CHROME_SUBSTRING = /©|all rights reserved|^search by keyword|select how often|receive an? (job )?alerts?/i;
 const COOKIE_WORD = /cookies?/i;
 // Banner language, not posting language: a consent-tooling role can say
 // "cookie consent" on one line, so a third notice-word is required.
@@ -31,7 +33,7 @@ const NOTICE_WORD = /we use|this (site|website)|your (browser|experience|privacy
 export function isJunkLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;
-  if (CODE_REMNANT.test(t) || BOILERPLATE_LINE.test(t)) return true;
+  if (CODE_REMNANT.test(t) || BOILERPLATE_LINE.test(t) || CHROME_SUBSTRING.test(t)) return true;
   return COOKIE_WORD.test(t) && CONSENT_WORD.test(t) && NOTICE_WORD.test(t);
 }
 

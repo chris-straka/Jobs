@@ -46,6 +46,30 @@ describe("isJunkLine", () => {
     expect(isJunkLine("Loading...")).toBe(true);
   });
 
+  it("drops buttons, CTAs, copyright, and alert/search chrome", () => {
+    for (const junk of [
+      "Apply now",
+      "Apply now »",
+      "View All Jobs",
+      "Find similar jobs:",
+      "Create Alert",
+      "Show More Options",
+      "Copyright © 2026 PCL Constructors Inc. All rights reserved.",
+      "Select how often (in days) to receive an alert:",
+      "Search by Keyword Show More Options Country All",
+    ]) {
+      expect(isJunkLine(junk)).toBe(true);
+    }
+    for (const real of [
+      "Company: PCL Constructors Inc.",
+      "Primary Location: Edmonton, Alberta (Corporate)",
+      "What you will bring to the role:",
+      "Apply your skills to real construction software.",
+    ]) {
+      expect(isJunkLine(real)).toBe(false);
+    }
+  });
+
   it("drops cookie-banner lines but keeps real content", () => {
     expect(
       isJunkLine(
