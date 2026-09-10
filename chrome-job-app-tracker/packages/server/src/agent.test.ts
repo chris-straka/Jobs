@@ -6,6 +6,7 @@ import {
   agentEnabled,
   agentMaxSteps,
   agentModel,
+  agentReasoningEffort,
   agentTimeoutMs,
   buildAgentPrompt,
   childEnv,
@@ -30,6 +31,43 @@ describe("agent tailoring", () => {
     expect(agentTimeoutMs({})).toBe(540000);
     expect(agentTimeoutMs({ JAT_AGENT_TIMEOUT_MS: "nope" })).toBe(540000);
     expect(agentMaxSteps({})).toBe(50);
+    expect(agentReasoningEffort({})).toBe(null);
+    expect(agentReasoningEffort({ JAT_AGENT_REASONING_EFFORT: "medium" })).toBe("medium");
+    expect(agentReasoningEffort({ JAT_AGENT_REASONING_EFFORT: "extreme" })).toBe(null);
+  });
+
+  it("passes reasoning effort only when explicitly set", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "jat-effort-"));
+    tmpDirs.push(tmp);
+    const folder = "applications/2026-09-09_acme_x";
+    await mkdir(path.join(tmp, folder), { recursive: true });
+    await writeFile(path.join(tmp, folder, "notes.md"), "# Acme — X\n");
+    const seen: string[][] = [];
+    const base = {
+      root: tmp,
+      folder,
+      track: "swe",
+      region: "ca",
+      fitOrder: ["telemetry"],
+      knownBullets: ["arch"],
+      onStage: () => {},
+    };
+    const run = async (env: NodeJS.ProcessEnv): Promise<void> => {
+      await runAgentTailor({
+        ...base,
+        env,
+        spawnFn: async (_bin, args) => {
+          seen.push(args);
+          return { exitCode: 0, timedOut: false, stdout: "done", stderr: "" };
+        },
+      });
+    };
+    await run({});
+    await run({ JAT_AGENT_REASONING_EFFORT: "low" });
+    expect(seen[0]).not.toContain("--reasoning-effort");
+    const i = seen[1].indexOf("--reasoning-effort");
+    expect(i).toBeGreaterThan(-1);
+    expect(seen[1][i + 1]).toBe("low");
   });
 
   it("resolves the binary beyond a stripped PATH", async () => {

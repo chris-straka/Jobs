@@ -43,6 +43,18 @@ export function agentMaxSteps(env: NodeJS.ProcessEnv = process.env): number {
   return Number.isFinite(n) && n > 0 ? n : 50;
 }
 
+const REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+/**
+ * Optional reasoning-effort override. Unset (the norm) passes nothing and
+ * muse uses its own default (high). Set JAT_AGENT_REASONING_EFFORT=medium
+ * (or low) to trade thinking depth for faster tailoring runs.
+ */
+export function agentReasoningEffort(env: NodeJS.ProcessEnv = process.env): string | null {
+  const v = env.JAT_AGENT_REASONING_EFFORT;
+  return v && REASONING_EFFORTS.includes(v) ? v : null;
+}
+
 export interface AgentPromptInput {
   root: string;
   folder: string;
@@ -222,6 +234,7 @@ export async function runAgentTailor(opts: {
   });
   opts.onStage("agent");
   const bin = resolveBin(env.JAT_AGENT_BIN ?? "muse", env);
+  const effort = agentReasoningEffort(env);
   // Sandbox and approvals stay ON (no --yolo): the filesystem/network
   // sandbox confines the run while --approval-mode never keeps headless
   // runs from stalling on prompts. Untrusted posting text still reaches
@@ -242,6 +255,7 @@ export async function runAgentTailor(opts: {
     // Tailoring reads local files and compiles; it never needs the web.
     // Removing the tool class kills remote-fetch exfiltration outright.
     "--disable-web-tools",
+    ...(effort ? ["--reasoning-effort", effort] : []),
     prompt,
   ];
   // Human text streamed as run_output_delta doubles as the failure record;
