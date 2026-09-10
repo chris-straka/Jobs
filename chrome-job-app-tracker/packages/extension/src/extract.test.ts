@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test";
 import {
   cleanText,
   detectTrack,
+  dropJunkLines,
   guessRegion,
   isDenied,
+  isJunkLine,
   pickDescription,
   pickTitle,
   postingSignals,
@@ -28,6 +30,62 @@ describe("pickDescription", () => {
 
   it("falls back to the title when nothing is substantial", () => {
     expect(pickDescription("  Job title ", [{ source: "nav", text: "menu" }])).toBe("Job title");
+  });
+});
+
+describe("isJunkLine", () => {
+  it("drops script remnants", () => {
+    expect(isJunkLine('$(function() { $("#skipLink").click(); });')).toBe(true);
+    expect(isJunkLine("//<![CDATA[ $(document).ready(function() {")).toBe(true);
+    expect(isJunkLine("var offset = $(':target').offset();")).toBe(true);
+  });
+
+  it("drops screen-reader and loader boilerplate", () => {
+    expect(isJunkLine("Opens in a new tab.")).toBe(true);
+    expect(isJunkLine("Skip to main content")).toBe(true);
+    expect(isJunkLine("Loading...")).toBe(true);
+  });
+
+  it("drops cookie-banner lines but keeps real content", () => {
+    expect(
+      isJunkLine(
+        "We use cookies to offer you the best possible website experience. Accept All Cookies",
+      ),
+    ).toBe(true);
+    expect(isJunkLine("Modify Cookie Preferences Accept All Cookies")).toBe(true);
+    expect(isJunkLine("Writes clean, scalable web applications.")).toBe(false);
+    // Consent-tooling roles stay intact: no notice-word, no drop.
+    expect(isJunkLine("Experience with cookie consent banners")).toBe(false);
+  });
+});
+
+describe("dropJunkLines", () => {
+  it("strips junk and collapses consecutive repeats", () => {
+    const real = "Designs and develops in-house software systems. ".repeat(10);
+    const text = [
+      "We use cookies to improve your experience. Accept All Cookies",
+      "Professionals Skilled Craft Students",
+      "Professionals Skilled Craft Students",
+      "Opens in a new tab.",
+      "Opens in a new tab.",
+      real,
+      "$(document).ready(function() {",
+    ].join("\n");
+    const out = dropJunkLines(text);
+    expect(out).not.toContain("cookies");
+    expect(out).not.toContain("Opens in a new tab");
+    expect(out).not.toContain("$(document)");
+    expect(out).toContain("Professionals Skilled Craft Students");
+    expect(out.match(/Professionals Skilled Craft Students/g)).toHaveLength(1);
+    expect(out).toContain("in-house software");
+  });
+
+  it("keeps junk from inflating a candidate past the threshold", () => {
+    const thin = "Short role blurb. ";
+    const junk = "Opens in a new tab.\n".repeat(30);
+    expect(
+      pickDescription("Fallback title", [{ source: "main", text: thin + junk }]),
+    ).toBe("Fallback title");
   });
 });
 

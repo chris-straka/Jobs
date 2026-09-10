@@ -19,6 +19,38 @@ export function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+const CODE_REMNANT = /\$\(|jQuery|<!\[CDATA|\]\]>/;
+const BOILERPLATE_LINE = /^(opens? in a new (tab|window)\.?|skip to main content|loading\.{3})$/i;
+const COOKIE_WORD = /cookies?/i;
+// Banner language, not posting language: a consent-tooling role can say
+// "cookie consent" on one line, so a third notice-word is required.
+const CONSENT_WORD = /accept|consent|preferen|opt.?out|privacy|banner|polic/i;
+const NOTICE_WORD = /we use|this (site|website)|your (browser|experience|privacy|choices)|all cookies|manage/i;
+
+/** True when a raw text line is scraper junk, not posting content. */
+export function isJunkLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  if (CODE_REMNANT.test(t) || BOILERPLATE_LINE.test(t)) return true;
+  return COOKIE_WORD.test(t) && CONSENT_WORD.test(t) && NOTICE_WORD.test(t);
+}
+
+/**
+ * Drop junk lines and collapse consecutive repeats ("Opens in a new
+ * tab." × 4). Runs before whitespace collapsing so boilerplate can't
+ * inflate a candidate past the substance threshold.
+ */
+export function dropJunkLines(text: string): string {
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (isJunkLine(t)) continue;
+    if (out.length > 0 && out[out.length - 1] === t) continue;
+    out.push(t);
+  }
+  return out.join("\n");
+}
+
 /** Matches clickable apply controls: "Apply now", "Easy Apply", "Submit application". */
 export const APPLY_TEXT = /appl(y|ication)|submit.*application|easy apply/i;
 
@@ -62,7 +94,7 @@ export function isDenied(host: string, denyHosts: string[]): boolean {
  */
 export function pickDescription(title: string, candidates: PageCandidate[]): string {
   const texts = candidates
-    .map((c) => cleanText(c.text))
+    .map((c) => cleanText(dropJunkLines(c.text)))
     .filter((t) => t.length >= 200)
     .sort((a, b) => b.length - a.length);
   return texts[0] ?? cleanText(title);

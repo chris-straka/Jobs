@@ -20,13 +20,35 @@ const SELECTORS = [
 
 const PILL_ID = "jat-pill";
 
+const SCRUB_SELECTORS = [
+  "script",
+  "style",
+  "noscript",
+  "template",
+  "svg",
+  "canvas",
+  "iframe",
+  '[id*="cookie" i]',
+  '[class*="cookie" i]',
+  '[id*="consent" i]',
+  '[class*="consent" i]',
+  '[aria-label*="cookie" i]',
+];
+
+/** Text of el with scripts, styles, and consent banners removed. */
+function scrubbedText(el: Element): string {
+  const clone = el.cloneNode(true) as Element;
+  clone.querySelectorAll(SCRUB_SELECTORS.join(",")).forEach((n) => n.remove());
+  return clone.textContent ?? "";
+}
+
 function largestDiv(): PageCandidate | null {
   let best: { el: Element; len: number } | null = null;
   for (const el of document.querySelectorAll("div")) {
     const len = (el.textContent ?? "").length;
     if (len > 500 && (!best || len > best.len)) best = { el, len };
   }
-  return best ? { source: "largest-div", text: best.el.textContent ?? "" } : null;
+  return best ? { source: "largest-div", text: scrubbedText(best.el) } : null;
 }
 
 export interface Posting {
@@ -45,7 +67,7 @@ export function readPosting(): Posting {
   const candidates: PageCandidate[] = SELECTORS.flatMap((sel) =>
     [...document.querySelectorAll(sel)].map((el) => ({
       source: sel,
-      text: el.textContent ?? "",
+      text: scrubbedText(el),
     })),
   );
   const div = largestDiv();
