@@ -9,19 +9,19 @@ import { die } from "./prompt.js";
 export function extensionHelp(): string {
   return `Usage: ja extension [--out DIR] [--watch]
 
-Rebuilds the extension bundle and copies a load-ready folder to
-~/Downloads/jat-extension (or --out). Load it at chrome://extensions
-with Developer mode on, via Load unpacked. The repo stays the source
-of truth — deleting the copy only unloads it until you re-run this.
-Also ensures the native-messaging host is installed for the loaded
-extension, skipping when it is already set up.
---watch keeps the copy in sync on every save; Chrome still needs a
-manual Reload plus a tab reload to pick changes up.`;
+Rebuilds the extension bundle in place and stamps repo-root.txt, so the
+checkout copy at packages/extension is load-ready: load that folder at
+chrome://extensions with Developer mode on, via Load unpacked, and hit
+Reload there after rebuilding. --out DIR additionally copies a
+load-ready folder to DIR. Also ensures the native-messaging host is
+installed for the loaded extension, skipping when it is already set up.
+--watch rebuilds on every save; Chrome still needs a manual Reload
+plus a tab reload to pick changes up.`;
 }
 
 const EXPORT_FILES = ["manifest.json", "popup.html", "dist", "icons"];
 
-function buildAndExport(tracker: string, ext: string, out: string, jobsRoot: string): void {
+function buildExtension(tracker: string): void {
   const build = spawnSync("bun", ["run", "--filter", "@jat/extension", "build"], {
     cwd: tracker,
     encoding: "utf8",
@@ -32,6 +32,9 @@ function buildAndExport(tracker: string, ext: string, out: string, jobsRoot: str
       `extension build failed — run it by hand in ${tracker}${build.error ? " (bun not found?)" : `:\n${build.stderr}`}`,
     );
   }
+}
+
+function exportCopy(ext: string, out: string, jobsRoot: string): void {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   for (const f of EXPORT_FILES) {
@@ -61,33 +64,49 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
     : root;
   const ext = path.join(tracker, "packages", "extension");
   if (!existsSync(path.join(ext, "package.json"))) die(`no extension checkout under ${tracker}`);
-  const out = values.out ?? path.join(homedir(), "Downloads", "jat-extension");
+  const out = values.out ?? null;
   // Stamp the Jobs root so the popup builds runnable commands without the host.
   const jobsRoot = existsSync(path.join(root, "chrome-job-app-tracker", "package.json"))
     ? root
     : path.dirname(root);
-  const candidates = [...new Set([ext, out, path.join(homedir(), "Downloads", "jat-extension")])];
+  const candidates = [
+    ...new Set(
+      [ext, path.join(homedir(), "Downloads", "jat-extension"), ...(out ? [out] : [])].map((c) =>
+        path.normalize(c),
+      ),
+    ),
+  ];
   const hostStatus = (): void => {
     console.log(ensureHost(tracker, candidates));
   };
+  // Rebuild dist in place; with --out, also refresh the exported copy.
+  const refresh = (): void => {
+    buildExtension(tracker);
+    if (out) {
+      exportCopy(ext, out, jobsRoot);
+    } else {
+      writeFileSync(path.join(ext, "repo-root.txt"), `${jobsRoot}\n`);
+    }
+  };
+  const readyLine = out
+    ? `extension ready: ${out}\nload it at chrome://extensions (Developer mode → Load unpacked)`
+    : `extension built in place: ${ext}\nReload it at chrome://extensions, then reload posting tabs`;
   if (!values.watch) {
-    buildAndExport(tracker, ext, out, jobsRoot);
-    console.log(
-      `extension ready: ${out}\nload it at chrome://extensions (Developer mode → Load unpacked)`,
-    );
+    refresh();
+    console.log(readyLine);
     hostStatus();
     return;
   }
-  console.log(`watching ${ext} → ${out} (Ctrl-C to stop)`);
-  buildAndExport(tracker, ext, out, jobsRoot);
-  console.log(`extension ready: ${out}`);
+  console.log(`watching ${ext}${out ? ` → ${out}` : " (in place)"} (Ctrl-C to stop)`);
+  refresh();
+  console.log(readyLine);
   hostStatus();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const reexport = (): void => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      buildAndExport(tracker, ext, out, jobsRoot);
-      console.log(`re-exported: ${out}`);
+      refresh();
+      console.log(`rebuilt: ${out ?? ext}`);
     }, 300);
   };
   watch(path.join(ext, "src"), { recursive: true }, reexport);

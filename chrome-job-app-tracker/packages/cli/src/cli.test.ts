@@ -213,6 +213,20 @@ describe("ja", () => {
     }
   });
 
+  it("builds the extension in place when --out is omitted", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const r = run("--root", trackerRoot, "extension");
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("built in place");
+    expect(r.out).not.toContain("Downloads");
+    const ext = path.join(trackerRoot, "packages", "extension");
+    for (const f of ["dist/popup.js", "dist/background.js", "dist/content.js"]) {
+      expect(existsSync(path.join(ext, f))).toBe(true);
+    }
+    const stamped = await readFile(path.join(ext, "repo-root.txt"), "utf8");
+    expect(stamped.trim()).toBe(path.dirname(trackerRoot));
+  });
+
   it("stays up in watch mode and exports", async () => {
     const { mkdtemp, rm } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
