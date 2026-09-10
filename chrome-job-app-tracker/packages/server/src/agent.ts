@@ -239,6 +239,9 @@ export async function runAgentTailor(opts: {
     "--json",
     "--approval-mode",
     "never",
+    // Tailoring reads local files and compiles; it never needs the web.
+    // Removing the tool class kills remote-fetch exfiltration outright.
+    "--disable-web-tools",
     prompt,
   ];
   // Human text streamed as run_output_delta doubles as the failure record;

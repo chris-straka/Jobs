@@ -13,3 +13,5 @@ content/
 docs/
 .agents/
 .jat/
+
+.env*

@@ -124,6 +124,7 @@ describe("agent tailoring", () => {
         expect(args).not.toContain("--yolo");
         expect(args).toContain("--approval-mode");
         expect(args).toContain("never");
+        expect(args).toContain("--disable-web-tools");
         expect(args).toContain(tmp);
         await writeFile(
           path.join(tmp, folder, "resume.typ"),
