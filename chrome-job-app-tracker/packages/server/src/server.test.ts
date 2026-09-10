@@ -10,7 +10,7 @@ import {
   setApplicationStatus,
 } from "@jat/core";
 import { repoRoot } from "./repo.js";
-import { TIGHT_KNOBS, buildResumeTyp, dropOneBullet } from "./draft.js";
+import { buildResumeTyp } from "./draft.js";
 import { modelConfigFromEnv, suggest } from "./model.js";
 import { startServer } from "./index.js";
 
@@ -31,6 +31,11 @@ const SECRET_KEYS = [
   "META_API_KEY",
   "META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE",
   "JAT_AUTO_DRAFT",
+  "JAT_AGENT",
+  "JAT_AGENT_MODEL",
+  "JAT_AGENT_BIN",
+  "JAT_AGENT_TIMEOUT_MS",
+  "JAT_AGENT_MAX_STEPS",
 ];
 const savedEnv = new Map<string, string | undefined>();
 beforeAll(() => {
@@ -38,6 +43,9 @@ beforeAll(() => {
     savedEnv.set(k, process.env[k]);
     delete process.env[k];
   }
+  // Only "0" disables the agent path: absent means enabled, which would
+  // spawn a real headless agent in the HTTP tests.
+  process.env.JAT_AGENT = "0";
 });
 afterAll(async () => {
   for (const k of SECRET_KEYS) {
@@ -191,51 +199,6 @@ describe("model", () => {
     expect(modelConfigFromEnv({ MODEL_API_URL: "u", MODEL_API_KEY: "k", MODEL_NAME: "m" })).toEqual(
       { url: "u", key: "k", model: "m" },
     );
-  });
-});
-
-describe("draft fit", () => {
-  const bullets = [
-    { project: "telemetry", id: "arch" },
-    { project: "telemetry", id: "api-relay" },
-    { project: "dbmodel", id: "sql" },
-    { project: "hci", id: "prototypes" },
-  ];
-  const fitOrder = ["telemetry", "dbmodel", "hci"];
-
-  it("drops the last bullet of the lowest-ranked multi-bullet project", () => {
-    expect(dropOneBullet(bullets, fitOrder)).toEqual([
-      { project: "telemetry", id: "arch" },
-      { project: "dbmodel", id: "sql" },
-      { project: "hci", id: "prototypes" },
-    ]);
-  });
-
-  it("drops the whole lowest-ranked project when all hold one bullet", () => {
-    const singles = [
-      { project: "telemetry", id: "arch" },
-      { project: "dbmodel", id: "sql" },
-      { project: "hci", id: "prototypes" },
-    ];
-    expect(dropOneBullet(singles, fitOrder)).toEqual([
-      { project: "telemetry", id: "arch" },
-      { project: "dbmodel", id: "sql" },
-    ]);
-  });
-
-  it("never drops the final bullet", () => {
-    const one = [{ project: "telemetry", id: "arch" }];
-    expect(dropOneBullet(one, fitOrder)).toEqual(one);
-  });
-
-  it("renders knob overrides after the project list", () => {
-    const typ = buildResumeTyp(
-      { track: "swe", region: "ca", summary: "S.", bullets, fitOrder },
-      TIGHT_KNOBS,
-    );
-    expect(typ).toContain("  leading: 0.40em,\n");
-    expect(typ).toContain("  bullet-gap: 5pt,\n");
-    expect(typ).toContain('    (id: "telemetry", bullets: ("arch", "api-relay",)),');
   });
 });
 

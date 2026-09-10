@@ -71,6 +71,10 @@ const SECRET_KEYS = [
   "META_BASE_URL",
   "META_API_KEY",
   "META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE",
+  "JAT_AGENT_MODEL",
+  "JAT_AGENT_BIN",
+  "JAT_AGENT_TIMEOUT_MS",
+  "JAT_AGENT_MAX_STEPS",
 ];
 
 export async function startCaptureServer(repoRoot: string): Promise<CaptureServer> {
@@ -79,6 +83,8 @@ export async function startCaptureServer(repoRoot: string): Promise<CaptureServe
     PORT: "0",
     REPO_ROOT: repoRoot,
     JAT_AUTO_DRAFT: "0",
+    // Never spawn a real headless agent in e2e: only "0" disables it.
+    JAT_AGENT: "0",
   };
   // Empty beats absent: the child loads chrome-job-app-tracker/.env with ??=,
   // so only present-but-empty keys keep the file from re-enabling the model.

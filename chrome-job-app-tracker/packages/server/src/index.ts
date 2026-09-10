@@ -30,7 +30,8 @@ import {
   setApplicationStatus,
   writeFalsePositives,
 } from "@jat/core";
-import type { BulletRef } from "@jat/shared";
+import type { BulletRef, ModelSuggestion } from "@jat/shared";
+import { agentEnabled, runAgentTailor } from "./agent.js";
 import { autoDraftEnabled, buildResumeTyp, dropOneBullet, TIGHT_KNOBS } from "./draft.js";
 import { suggest } from "./model.js";
 
@@ -229,12 +230,43 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
             const fit = analyzeFit(parsed.data.description, library);
             setStage(clientId, "build");
             let build = buildResumes(root, [folder]);
-            setStage(clientId, "model");
-            const model = await suggest(parsed.data.description, library);
             const draft = { written: false, summary: null as string | null, bullets: 0 };
             const notes = { written: false };
+            let model: ModelSuggestion;
+            if (agentEnabled() && autoDraftEnabled()) {
+              // Headless agent does the whole tailoring loop; the server
+              // only verifies what it left behind.
+              model = {
+                disabled: false,
+                summary: null,
+                bullets: [],
+                gaps: [],
+                notes: null,
+                raw: null,
+              };
+              const known: string[] = [];
+              for (const p of library) for (const b of p.bullets) known.push(b.id);
+              const run = await runAgentTailor({
+                root,
+                folder,
+                track: parsed.data.track,
+                region: parsed.data.region,
+                fitOrder: fit.projects.map((p) => p.id),
+                knownBullets: known,
+                onStage: (s) => setStage(clientId, s),
+              });
+              build = buildResumes(root, [folder]);
+              draft.written = run.draftWritten;
+              draft.bullets = run.bullets;
+              notes.written = run.notesWritten;
+              model.raw = run.raw;
+            } else {
+              setStage(clientId, "model");
+              model = await suggest(parsed.data.description, library);
+            }
             if (
               autoDraftEnabled() &&
+              !agentEnabled() &&
               !model.disabled &&
               model.summary &&
               model.bullets.length > 0
@@ -283,7 +315,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
                 );
               }
             }
-            if (autoDraftEnabled() && !model.disabled && model.notes) {
+            if (autoDraftEnabled() && !agentEnabled() && !model.disabled && model.notes) {
               setStage(clientId, "notes");
               try {
                 const notesPath = path.join(root, folder, "notes.md");

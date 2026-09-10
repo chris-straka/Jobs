@@ -502,6 +502,8 @@ function stageLabel(stage: string): string | null {
       return "Fitting one page…";
     case "notes":
       return "Writing interview notes…";
+    case "agent":
+      return "Muse Spark is tailoring…";
     default:
       return null;
   }
@@ -588,7 +590,8 @@ async function save(): Promise<void> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...parsed.data, clientId }),
-      signal: AbortSignal.timeout(180000),
+      // Outlasts the headless agent run (default 9 min server-side).
+      signal: AbortSignal.timeout(600000),
     });
   } catch (err) {
     stopProgress();

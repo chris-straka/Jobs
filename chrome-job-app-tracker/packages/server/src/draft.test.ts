@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { autoDraftEnabled, buildResumeTyp } from "./draft.js";
+import { TIGHT_KNOBS, autoDraftEnabled, buildResumeTyp, dropOneBullet } from "./draft.js";
 
 describe("buildResumeTyp", () => {
   it("groups bullets by project in fit order and escapes the summary", () => {
@@ -41,5 +41,50 @@ describe("autoDraftEnabled", () => {
     expect(autoDraftEnabled({})).toBe(true);
     expect(autoDraftEnabled({ JAT_AUTO_DRAFT: "1" })).toBe(true);
     expect(autoDraftEnabled({ JAT_AUTO_DRAFT: "0" })).toBe(false);
+  });
+});
+
+describe("draft fit", () => {
+  const bullets = [
+    { project: "telemetry", id: "arch" },
+    { project: "telemetry", id: "api-relay" },
+    { project: "dbmodel", id: "sql" },
+    { project: "hci", id: "prototypes" },
+  ];
+  const fitOrder = ["telemetry", "dbmodel", "hci"];
+
+  it("drops the last bullet of the lowest-ranked multi-bullet project", () => {
+    expect(dropOneBullet(bullets, fitOrder)).toEqual([
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+      { project: "hci", id: "prototypes" },
+    ]);
+  });
+
+  it("drops the whole lowest-ranked project when all hold one bullet", () => {
+    const singles = [
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+      { project: "hci", id: "prototypes" },
+    ];
+    expect(dropOneBullet(singles, fitOrder)).toEqual([
+      { project: "telemetry", id: "arch" },
+      { project: "dbmodel", id: "sql" },
+    ]);
+  });
+
+  it("never drops the final bullet", () => {
+    const one = [{ project: "telemetry", id: "arch" }];
+    expect(dropOneBullet(one, fitOrder)).toEqual(one);
+  });
+
+  it("renders knob overrides after the project list", () => {
+    const typ = buildResumeTyp(
+      { track: "swe", region: "ca", summary: "S.", bullets, fitOrder },
+      TIGHT_KNOBS,
+    );
+    expect(typ).toContain("  leading: 0.40em,\n");
+    expect(typ).toContain("  bullet-gap: 5pt,\n");
+    expect(typ).toContain('    (id: "telemetry", bullets: ("arch", "api-relay",)),');
   });
 });
