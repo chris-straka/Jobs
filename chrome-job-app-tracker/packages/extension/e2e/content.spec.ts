@@ -89,6 +89,12 @@ test("content script extracts the posting from the real bundle", async ({ page }
     expect(result.posting?.description).not.toContain("boilerplate");
     expect(result.posting?.description).not.toContain("Apply now");
     expect(result.posting?.description).not.toContain("soup");
+    // Invisible ink never reaches the description, in any hiding —
+    // including inside the winning candidate itself.
+    expect(result.posting?.description).not.toContain("HIDDEN-DIV-INJECTION");
+    expect(result.posting?.description).not.toContain("HIDDEN-ATTR-INJECTION");
+    expect(result.posting?.description).not.toContain("OFFSCREEN-INJECTION");
+    expect(result.posting?.description).not.toContain("HIDDEN-ARTICLE-INJECTION");
 
     // Pill is three buttons and nothing else.
     await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");

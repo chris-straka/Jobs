@@ -68,38 +68,83 @@ function isChromeContainer(el: Element): boolean {
   ].filter((n) => n.length > 0);
   return names.some((name) => {
     if (POSTING_HINT.test(name)) return false;
-    return name
-      .split(/[-_]|(?=[A-Z])/)
-      .some((part) => CHROME_PART.test(part.toLowerCase()));
+    return name.split(/[-_]|(?=[A-Z])/).some((part) => CHROME_PART.test(part.toLowerCase()));
   });
 }
 
 /**
- * Detached, scrubbed copy of the page; candidates read from this, so no
- * site-specific strings are needed anywhere — landmarks, chrome-named
- * containers, and controls are gone structurally.
+ * Whether the user could see this element when reading the page. Anything
+ * failing here is invisible ink — display:none subtrees, hidden attributes,
+ * zero-area or off-viewport boxes, transparency. Those are exactly the
+ * carriers a prompt-injecting posting would use, and exactly what the user
+ * cannot catch by reading. Visible prose stays, whatever it says: telling
+ * "Note to AI assistants" apart from "Note to applicants" is the sandbox's
+ * and the verifier's job, not the scraper's.
  */
-function scrubbedRoot(): Element {
-  const clone = document.documentElement.cloneNode(true) as Element;
-  clone.querySelectorAll(STATIC_SCRUB.join(",")).forEach((n) => n.remove());
-  for (const el of clone.querySelectorAll("div, section, header, footer, ul, form")) {
-    if (isChromeContainer(el)) el.remove();
+function isRendered(el: Element): boolean {
+  if (el.hasAttribute("hidden")) return false;
+  const rects = el.getClientRects();
+  if (rects.length === 0) return false;
+  let onScreen = false;
+  for (const r of rects) {
+    if (r.right >= 0 && r.left <= window.innerWidth) {
+      onScreen = true;
+      break;
+    }
   }
-  return clone;
+  if (!onScreen) return false;
+  const style = getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
 }
 
-/** Candidate text; the root comes pre-scrubbed. */
-function scrubbedText(el: Element): string {
-  return el.textContent ?? "";
+/**
+ * Visible text of one candidate subtree, walked live so hidden descendants
+ * prune exactly where layout says they do. Scripts, styles, and
+ * chrome-named containers contribute nothing; the root itself is exempt
+ * from the chrome check (it was selected as a candidate, not filtered).
+ */
+const SCRUB_SELECTOR = STATIC_SCRUB.join(",");
+
+function visibleText(el: Element, isRoot: boolean): string {
+  // Same structural scrub as before, evaluated live per element.
+  if (el.matches(SCRUB_SELECTOR)) return "";
+  const tag = el.tagName.toLowerCase();
+  if (
+    !isRoot &&
+    (tag === "div" ||
+      tag === "section" ||
+      tag === "header" ||
+      tag === "footer" ||
+      tag === "ul" ||
+      tag === "form") &&
+    isChromeContainer(el)
+  ) {
+    return "";
+  }
+  if (!isRendered(el)) return "";
+  let out = "";
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) out += node.textContent ?? "";
+    else if (node.nodeType === Node.ELEMENT_NODE) out += visibleText(node as Element, false);
+  }
+  return out;
 }
 
-function largestDiv(root: Element): PageCandidate | null {
-  let best: { el: Element; len: number } | null = null;
-  for (const el of root.querySelectorAll("div")) {
-    const len = (el.textContent ?? "").length;
-    if (len > 500 && (!best || len > best.len)) best = { el, len };
+function largestDiv(): PageCandidate | null {
+  const survivors: Element[] = [];
+  for (const el of document.querySelectorAll("div")) {
+    // Cheap gates first: length, then script carriers, then layout.
+    if ((el.textContent ?? "").length <= 500) continue;
+    if (el.querySelector("script, style, noscript")) continue;
+    if (!isRendered(el)) continue;
+    survivors.push(el);
   }
-  return best ? { source: "largest-div", text: scrubbedText(best.el) } : null;
+  let best: { text: string } | null = null;
+  for (const el of survivors) {
+    const text = visibleText(el, true);
+    if (text.length > 500 && (!best || text.length > best.text.length)) best = { text };
+  }
+  return best ? { source: "largest-div", text: best.text } : null;
 }
 
 export interface Posting {
@@ -115,18 +160,19 @@ export interface Posting {
  * @returns title, URL, and description of the current tab
  */
 export function readPosting(): Posting {
-  const root = scrubbedRoot();
+  // Candidates come from the live document; each survivor contributes
+  // only the text layout says is visible.
   const candidates: PageCandidate[] = SELECTORS.flatMap((sel) =>
-    [...root.querySelectorAll(sel)].map((el) => ({
-      source: sel,
-      text: scrubbedText(el),
-    })),
+    [...document.querySelectorAll(sel)]
+      .filter(isRendered)
+      .map((el) => ({ source: sel, text: visibleText(el, true) })),
   );
-  const div = largestDiv(root);
+  const div = largestDiv();
   if (div) candidates.push(div);
   const og = document.querySelector("meta[property='og:title']")?.getAttribute("content") ?? "";
   const h1 =
     [...document.querySelectorAll("h1")]
+      .filter(isRendered)
       .map((h) => cleanText(h.textContent ?? ""))
       .find((t) => t.length >= 4) ?? "";
   return {
@@ -182,12 +228,9 @@ function markAppliedAction(): void {
     .sendMessage({ type: "JAT_MARK_APPLIED", url: location.href })
     .then((r: unknown) => {
       const ok = (r as { ok?: boolean } | null)?.ok === true;
-      showPill(
-        ok ? `<div>Marked applied ✓</div>` : `<div>Not tracked yet — save it first.</div>`,
-        {
-          x: removePill,
-        },
-      );
+      showPill(ok ? `<div>Marked applied ✓</div>` : `<div>Not tracked yet — save it first.</div>`, {
+        x: removePill,
+      });
     });
 }
 
@@ -235,9 +278,7 @@ function reminderPill(mode: PillMode): void {
                 `<button data-act="x">✕</button></div>`,
               {
                 dash: () => {
-                  void chrome.runtime
-                    .sendMessage({ type: "JAT_OPEN_DASHBOARD" })
-                    .catch(() => {});
+                  void chrome.runtime.sendMessage({ type: "JAT_OPEN_DASHBOARD" }).catch(() => {});
                 },
                 undo: () => {
                   void chrome.runtime
