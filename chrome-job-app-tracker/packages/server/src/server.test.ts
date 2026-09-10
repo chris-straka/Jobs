@@ -212,6 +212,37 @@ describe("resolve + status", () => {
     }
   }, 120000);
 
+  it("persists ignore lists round-trip normalized", async () => {
+    const tmp = await mkFixture();
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      expect(await (await fetch(`${base}/api/ignore`)).json()).toEqual({
+        fpReported: [],
+        fpHosts: [],
+      });
+      const posted = await fetch(`${base}/api/ignore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fpReported: ["B.com ", "b.com"], fpHosts: ["C.com"] }),
+      });
+      expect(posted.status).toBe(200);
+      expect(await posted.json()).toEqual({ fpReported: ["b.com"], fpHosts: ["c.com"] });
+      const raw = await readFile(path.join(tmp, ".jat", "ignore.json"), "utf8");
+      expect(JSON.parse(raw)).toEqual({ fpReported: ["b.com"], fpHosts: ["c.com"] });
+      const bad = await fetch(`${base}/api/ignore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fpReported: "nope" }),
+      });
+      expect(bad.status).toBe(400);
+    } finally {
+      server.close();
+    }
+  }, 120000);
+
   it("returns 409 with the folder on duplicate saves", async () => {
     const tmp = await mkFixture();
     const server = startServer({ port: 0, root: tmp });

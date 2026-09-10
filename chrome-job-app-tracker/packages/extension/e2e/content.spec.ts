@@ -25,6 +25,10 @@ test("content script extracts the posting from the real bundle", async ({ page }
           store["fpReported"] = [...(hosts as string[]), msg.host];
         }
       }
+      if (msg?.type === "JAT_FP_UNREPORT" && msg.host) {
+        const hosts = Array.isArray(store["fpReported"]) ? store["fpReported"] : [];
+        store["fpReported"] = (hosts as string[]).filter((h) => h !== msg.host);
+      }
       return { ok: true };
     };
     const fakeChrome = {
@@ -87,13 +91,22 @@ test("content script extracts the posting from the real bundle", async ({ page }
     await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
     await expect(page.locator("#jat-pill")).not.toContainText("Save this job?");
 
-    // "False positive" hides the pill and records this host.
+    // "False positive" swaps the pill for a mute confirm and records this host.
     await page.locator("#jat-pill button[data-act='no']").click();
-    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    await expect(page.locator("#jat-pill")).toContainText("Muted");
+    await expect(page.locator("#jat-pill button[data-act='undo']")).toBeVisible();
     const store = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
     expect(store["fpReported"]).toContain("127.0.0.1");
+    // Undo puts the pill back and un-records the host.
+    await page.locator("#jat-pill button[data-act='undo']").click();
+    await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
+    const afterUndo = await page.evaluate(
+      () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
+    );
+    expect(afterUndo["fpReported"] ?? []).not.toContain("127.0.0.1");
   } finally {
     site.close();
   }
@@ -170,11 +183,11 @@ test("tracked draft pill swaps false-positive for mark applied", async ({ page }
     await expect(page.locator("#jat-pill")).toContainText("Marked applied ✓");
     expect(await messages(page)).toContain("JAT_MARK_APPLIED");
 
-    // Open routes through the background and dismisses the pill on success.
+    // Open routes through the background but leaves the pill up.
     await page.goto(`${site.url}/e2e/fixture-job.html`);
     await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
     await page.locator("#jat-pill button[data-act='open']").click();
-    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    await expect(page.locator("#jat-pill button[data-act='mark']")).toBeVisible();
     expect(await messages(page)).toContain("JAT_OPEN");
   } finally {
     site.close();
@@ -205,7 +218,8 @@ test("open hands the verdict-time posting to the background", async ({ page }) =
     await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
 
     await page.locator("#jat-pill button[data-act='open']").click();
-    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    // Open no longer dismisses the pill — only False positive and ✕ do.
+    await expect(page.locator("#jat-pill button[data-act='open']")).toBeVisible();
     const lastOpen = (await page.evaluate(
       () => (window as unknown as { __jatLastOpen?: unknown }).__jatLastOpen,
     )) as { url?: string; posting?: { title?: string; description?: string } };

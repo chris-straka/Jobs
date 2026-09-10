@@ -1,10 +1,16 @@
 import {
   PENDING_POSTING_KEY,
   PendingPosting,
+  IgnoreLists,
   OpenResponse,
   ResolveResponse,
   StatusResponse,
 } from "@jat/shared";
+
+interface StoredLists {
+  fpReported: string[];
+  fpHosts: string[];
+}
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -45,6 +51,66 @@ interface FpResult {
   reason?: string;
 }
 
+function cleanStoredList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((h): h is string => typeof h === "string"))]
+    : [];
+}
+
+async function readStoredLists(): Promise<StoredLists> {
+  const stored = await chrome.storage.local.get(["fpReported", "fpHosts"]);
+  return { fpReported: cleanStoredList(stored.fpReported), fpHosts: cleanStoredList(stored.fpHosts) };
+}
+
+function unionLists(a: StoredLists, b: StoredLists): StoredLists {
+  return {
+    fpReported: [...new Set([...a.fpReported, ...b.fpReported])].sort(),
+    fpHosts: [...new Set([...a.fpHosts, ...b.fpHosts])].sort(),
+  };
+}
+
+/**
+ * Push storage lists to disk after a local mutation (no union: the caller
+ * just set storage, so it wins). Silent offline — storage stays live.
+ */
+async function pushIgnoreLists(): Promise<void> {
+  try {
+    const base = await serverBase();
+    const stored = await readStoredLists();
+    await fetch(`${base}/api/ignore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(stored),
+    });
+  } catch {
+    // Offline — the file heals on the next online write.
+  }
+}
+
+/**
+ * Pull the on-disk lists into storage (union). Heals fresh profiles and
+ * hand-edited files; a removal made while offline may reappear once and
+ * needs a second, online removal.
+ */
+async function pullIgnoreLists(): Promise<void> {
+  try {
+    const base = await serverBase();
+    const stored = await readStoredLists();
+    const res = await fetch(`${base}/api/ignore`);
+    const parsed = IgnoreLists.safeParse(await res.json());
+    if (!parsed.success) return;
+    const merged = unionLists(stored, parsed.data);
+    await chrome.storage.local.set(merged);
+    await fetch(`${base}/api/ignore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(merged),
+    });
+  } catch {
+    // Offline — storage is the live store; nothing to converge.
+  }
+}
+
 /**
  * Pill reports land in fpReported, hand adds in fpHosts. The pill stays
  * hidden on both; the dashboard shows them as separate sections. A tracked
@@ -62,11 +128,19 @@ async function reportFalsePositive(host: string, url: string): Promise<FpResult>
       // Server offline — nothing tracked that we know of; record the report.
     }
   }
-  const stored = await chrome.storage.local.get(["fpReported"]);
-  const hosts = Array.isArray(stored.fpReported) ? stored.fpReported : [];
-  if (!hosts.includes(host)) {
-    await chrome.storage.local.set({ fpReported: [...hosts, host] });
+  const stored = await readStoredLists();
+  if (!stored.fpReported.includes(host)) {
+    await chrome.storage.local.set({ fpReported: [...stored.fpReported, host] });
   }
+  await pushIgnoreLists();
+  return { ok: true };
+}
+
+/** Pill Undo: un-mute the host and push the on-disk lists. */
+async function unreportFalsePositive(host: string): Promise<FpResult> {
+  const stored = await readStoredLists();
+  await chrome.storage.local.set({ fpReported: stored.fpReported.filter((h) => h !== host) });
+  await pushIgnoreLists();
   return { ok: true };
 }
 
@@ -162,6 +236,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "JAT_PILL_STATE") {
+    // Converge the on-disk mute lists into storage (unawaited): the next
+    // page's denied() check then sees file entries too.
+    void pullIgnoreLists();
     void pillState(String(msg.url ?? "")).then(sendResponse);
     return true;
   }
@@ -173,6 +250,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     void reportFalsePositive(String(msg.host ?? "").toLowerCase(), String(msg.url ?? "")).then(
       sendResponse,
     );
+    return true;
+  }
+  if (msg?.type === "JAT_FP_UNREPORT") {
+    void unreportFalsePositive(String(msg.host ?? "").toLowerCase()).then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_SHOW_BADGE") {

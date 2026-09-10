@@ -204,8 +204,8 @@ function reminderPill(mode: PillMode): void {
     // The background routes Open (tracked folder vs popup form) because
     // content scripts can open neither directly. The posting rides along:
     // the popup cannot always read the tab itself, so the pill hands over
-    // the exact text its verdict used. The pill only goes away on success,
-    // so a failed open leaves the page as it was.
+    // the exact text its verdict used. The pill stays up — only False
+    // positive and ✕ dismiss it.
     open: () => {
       const posting = cachedPosting ?? readPosting();
       void chrome.runtime
@@ -213,9 +213,6 @@ function reminderPill(mode: PillMode): void {
           type: "JAT_OPEN",
           url: location.href,
           posting: { title: posting.title, description: posting.description },
-        })
-        .then((r: unknown) => {
-          if ((r as { ok?: boolean } | null)?.ok === true) removePill();
         })
         .catch(() => {});
     },
@@ -227,7 +224,24 @@ function reminderPill(mode: PillMode): void {
           // A tracked posting can never be a false positive: the report is
           // refused, and the pill says what it is instead of vanishing.
           if ((r as { ok?: boolean } | null)?.ok === true) {
-            removePill();
+            showPill(
+              `<div style="display:flex;gap:8px;align-items:center">` +
+                `<span>Muted ✓</span>` +
+                `<button data-act="undo">Undo</button>` +
+                `<button data-act="x">✕</button></div>`,
+              {
+                undo: () => {
+                  void chrome.runtime
+                    .sendMessage({ type: "JAT_FP_UNREPORT", host: location.hostname })
+                    .then((u: unknown) => {
+                      if ((u as { ok?: boolean } | null)?.ok === true) {
+                        reminderPill(pillMode);
+                      }
+                    });
+                },
+                x: removePill,
+              },
+            );
           } else {
             showPill(`<div>Already saved ✓ — can't mute a tracked posting.</div>`, {
               x: removePill,
@@ -293,6 +307,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+/** Last rendered reminder variant, so Undo can put it back. */
+let pillMode: PillMode = "untracked";
+
 void (async () => {
   if (await denied()) return;
   const posting = readPosting();
@@ -303,17 +320,16 @@ void (async () => {
     title: posting.title,
   });
   if (verdict.isPosting) {
-    let mode: PillMode = "untracked";
     try {
       const s = (await chrome.runtime.sendMessage({
         type: "JAT_PILL_STATE",
         url: location.href,
       })) as { tracked?: boolean; applied?: boolean } | null;
-      if (s?.tracked) mode = s.applied ? "applied" : "draft";
+      if (s?.tracked) pillMode = s.applied ? "applied" : "draft";
     } catch {
       // background unreachable (tests, restricted pages) — plain pill
     }
-    reminderPill(mode);
+    reminderPill(pillMode);
     try {
       await chrome.runtime.sendMessage({ type: "JAT_SHOW_BADGE" });
     } catch {

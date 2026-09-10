@@ -7,6 +7,7 @@ import { DuplicateApplication, addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
+import { mergeIgnoreLists, readIgnoreLists, writeIgnoreLists } from "./ignore.js";
 import { openApplicationFolder } from "./open.js";
 import { listApplications, readApplicationStatus, setApplicationStatus } from "./status.js";
 
@@ -129,6 +130,20 @@ describe("readApplicationStatus", () => {
     setApplicationStatus(root, folder, "applied");
     expect(readApplicationStatus(root, folder)).toBe("applied");
     expect(readApplicationStatus(root, "applications/9999-99-99_nope_x")).toBeNull();
+  });
+});
+
+describe("ignore lists", () => {
+  it("round-trips normalized, merges, and matches hosts", async () => {
+    const root = await mkRoot();
+    expect(readIgnoreLists(root)).toEqual({ fpReported: [], fpHosts: [] });
+    writeIgnoreLists(root, { fpReported: ["B.com ", "a.com", "a.com"], fpHosts: ["C.com"] });
+    expect(readIgnoreLists(root)).toEqual({ fpReported: ["a.com", "b.com"], fpHosts: ["c.com"] });
+    const merged = mergeIgnoreLists(readIgnoreLists(root), {
+      fpReported: ["d.com"],
+      fpHosts: ["c.com", "e.com"],
+    });
+    expect(merged).toEqual({ fpReported: ["a.com", "b.com", "d.com"], fpHosts: ["c.com", "e.com"] });
   });
 });
 

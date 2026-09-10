@@ -4,6 +4,8 @@ import { pkgDir, startStatic } from "./helpers.js";
 test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
   await page.addInitScript(() => {
     const store: Record<string, unknown> = {
+      // Dead port: the dashboard must never touch an ambient real server.
+      server: "http://127.0.0.1:1",
       fpReported: ["reported.example.com"],
       fpHosts: ["example.com", "jobs.example.org"],
     };

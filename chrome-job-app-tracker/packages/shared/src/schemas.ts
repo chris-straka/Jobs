@@ -114,6 +114,13 @@ export const OpenResponse = z.object({
 });
 export type OpenResponse = z.infer<typeof OpenResponse>;
 
+/** Mute lists: pill reports (fpReported) and hand adds (fpHosts). */
+export const IgnoreLists = z.object({
+  fpReported: z.array(z.string()),
+  fpHosts: z.array(z.string()),
+});
+export type IgnoreLists = z.infer<typeof IgnoreLists>;
+
 /**
  * Pill-to-popup handoff: the content script stashes the exact posting the
  * pill verdict used, because the popup's own tab query is not always

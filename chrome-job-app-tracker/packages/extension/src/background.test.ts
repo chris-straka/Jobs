@@ -225,6 +225,25 @@ describe("JAT_FP_REPORT", () => {
   });
 });
 
+describe("JAT_FP_UNREPORT", () => {
+  it("removes the host and pushes storage to disk", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" });
+    expect(localStore["fpReported"]).toEqual(["example.com"]);
+    expect(await send("JAT_FP_UNREPORT", { host: "example.com" })).toEqual({ ok: true });
+    expect(localStore["fpReported"]).toEqual([]);
+    const pushes = fetchCalls.filter(
+      (c) => c.url.includes("/api/ignore") && (c.init?.method ?? "GET") === "POST",
+    );
+    const last = pushes[pushes.length - 1];
+    expect(last).toBeDefined();
+    const body = JSON.parse((last?.init as { body?: string } | undefined)?.body ?? "{}") as {
+      fpReported?: string[];
+    };
+    expect(body.fpReported).toEqual([]);
+  });
+});
+
 describe("JAT_MARK_APPLIED", () => {
   it("resolves the URL and moves the status", async () => {
     const folder = "applications/2026-09-09_acme_x";
