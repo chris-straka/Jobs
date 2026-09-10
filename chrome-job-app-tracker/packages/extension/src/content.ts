@@ -171,27 +171,55 @@ function showPill(html: string, actions: Record<string, () => void>): void {
   document.body.appendChild(pill);
 }
 
-function reminderPill(): void {
-  showPill(
-    `<div style="display:flex;gap:8px">` +
-      `<button data-act="open">Open</button>` +
-      `<button data-act="no">False positive</button>` +
-      `<button data-act="x">✕</button></div>`,
-    {
-      // The popup opens with the form prefilled; the background owns the
-      // openPopup call because content scripts cannot open it directly.
-      open: () => {
-        removePill();
-        void chrome.runtime.sendMessage({ type: "JAT_OPEN_POPUP" }).catch(() => {});
-      },
-      no: () => {
-        void chrome.runtime
-          .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname })
-          .then(removePill);
-      },
-      x: removePill,
+type PillMode = "untracked" | "draft" | "applied";
+
+function markAppliedAction(): void {
+  void chrome.runtime
+    .sendMessage({ type: "JAT_MARK_APPLIED", url: location.href })
+    .then((r: unknown) => {
+      const ok = (r as { ok?: boolean } | null)?.ok === true;
+      showPill(
+        ok ? `<div>Marked applied ✓</div>` : `<div>Not tracked yet — save it first.</div>`,
+        {
+          x: removePill,
+        },
+      );
+    });
+}
+
+/**
+ * Tracked but not yet applied: False positive gives way to Mark applied.
+ * Tracked and applied: neither — just Open and dismiss.
+ */
+function reminderPill(mode: PillMode): void {
+  const buttons =
+    `<button data-act="open">Open</button>` +
+    (mode === "draft"
+      ? `<button data-act="mark">Mark applied ✓</button>`
+      : mode === "untracked"
+        ? `<button data-act="no">False positive</button>`
+        : "") +
+    `<button data-act="x">✕</button>`;
+  showPill(`<div style="display:flex;gap:8px">${buttons}</div>`, {
+    // The background routes Open (tracked folder vs popup form) because
+    // content scripts can open neither directly. The pill only goes away
+    // on success, so a failed open leaves the page as it was.
+    open: () => {
+      void chrome.runtime
+        .sendMessage({ type: "JAT_OPEN", url: location.href })
+        .then((r: unknown) => {
+          if ((r as { ok?: boolean } | null)?.ok === true) removePill();
+        })
+        .catch(() => {});
     },
-  );
+    mark: markAppliedAction,
+    no: () => {
+      void chrome.runtime
+        .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname })
+        .then(removePill);
+    },
+    x: removePill,
+  });
 }
 
 function appliedPill(): void {
@@ -201,19 +229,7 @@ function appliedPill(): void {
       `<button data-act="yes">Mark applied ✓</button>` +
       `<button data-act="x">✕</button></div>`,
     {
-      yes: () => {
-        void chrome.runtime
-          .sendMessage({ type: "JAT_MARK_APPLIED", url: location.href })
-          .then((r: unknown) => {
-            const ok = (r as { ok?: boolean } | null)?.ok === true;
-            showPill(
-              ok ? `<div>Marked applied ✓</div>` : `<div>Not tracked yet — save it first.</div>`,
-              {
-                x: removePill,
-              },
-            );
-          });
-      },
+      yes: markAppliedAction,
       x: removePill,
     },
   );
@@ -264,7 +280,17 @@ void (async () => {
     title: posting.title,
   });
   if (verdict.isPosting) {
-    reminderPill();
+    let mode: PillMode = "untracked";
+    try {
+      const s = (await chrome.runtime.sendMessage({
+        type: "JAT_PILL_STATE",
+        url: location.href,
+      })) as { tracked?: boolean; applied?: boolean } | null;
+      if (s?.tracked) mode = s.applied ? "applied" : "draft";
+    } catch {
+      // background unreachable (tests, restricted pages) — plain pill
+    }
+    reminderPill(mode);
     try {
       await chrome.runtime.sendMessage({ type: "JAT_SHOW_BADGE" });
     } catch {

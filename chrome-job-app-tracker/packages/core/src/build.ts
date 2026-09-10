@@ -24,20 +24,20 @@ export function todoIds(root: string): string[] {
 
 export type Runner = (cmd: string, args: string[]) => { status: number | null; output: string };
 
-const TYPST_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local/bin")];
+const TOOL_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local/bin")];
 
 /**
- * Servers spawned outside a shell (native host, LaunchAgents) inherit a
- * skeletal PATH without typst. These are the only other places it lives.
+ * Processes spawned outside a shell (native host, LaunchAgents) inherit a
+ * skeletal PATH without user tools. These are the only other places they live.
  */
-function withTypstPath(): NodeJS.ProcessEnv {
+export function withToolPath(): NodeJS.ProcessEnv {
   const parts = (process.env.PATH ?? "").split(":").filter(Boolean);
-  for (const d of TYPST_PATHS) if (!parts.includes(d)) parts.push(d);
+  for (const d of TOOL_PATHS) if (!parts.includes(d)) parts.push(d);
   return { ...process.env, PATH: parts.join(":") };
 }
 
-function defaultRunner(cmd: string, args: string[]): { status: number | null; output: string } {
-  const r = spawnSync(cmd, args, { encoding: "utf8", env: withTypstPath() });
+export function defaultRunner(cmd: string, args: string[]): { status: number | null; output: string } {
+  const r = spawnSync(cmd, args, { encoding: "utf8", env: withToolPath() });
   return { status: r.status, output: `${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim() };
 }
 
@@ -61,7 +61,7 @@ export function buildResumes(
 
   const hasTypst = ((): boolean => {
     try {
-      const r = spawnSync("typst", ["--version"], { encoding: "utf8", env: withTypstPath() });
+      const r = spawnSync("typst", ["--version"], { encoding: "utf8", env: withToolPath() });
       return r.status === 0;
     } catch {
       return false;

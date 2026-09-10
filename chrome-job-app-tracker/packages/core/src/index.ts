@@ -4,3 +4,4 @@ export * from "./add.js";
 export * from "./build.js";
 export * from "./status.js";
 export * from "./library.js";
+export * from "./open.js";

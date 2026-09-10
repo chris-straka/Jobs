@@ -1,11 +1,27 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { AppStatus } from "@jat/shared";
+import { AppStatus } from "@jat/shared";
 import { formatRow, parseCsv, type AppRow } from "./csv.js";
 
 function jobStatus(jobMd: string): string | null {
   const m = /^status:\s*(\S+)/m.exec(jobMd);
   return m ? m[1] : null;
+}
+
+/**
+ * Current status from `job.md` front-matter. `null` when the folder,
+ * the file, or the status line is missing or unparsable — callers then
+ * treat the posting as not-applied, which keeps the Mark applied path.
+ */
+export function readApplicationStatus(root: string, folder: string): AppStatus | null {
+  try {
+    const parsed = AppStatus.safeParse(
+      jobStatus(readFileSync(path.join(root, folder, "job.md"), "utf8")),
+    );
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

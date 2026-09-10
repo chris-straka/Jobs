@@ -99,5 +99,17 @@ export const ResolveResponse = z.object({
   folder: z.string().nullable(),
   /** Saved job.md body for the folder, so the caller can tell a repost from a recycled URL. */
   description: z.string().nullable(),
+  /** Application status for the folder; null when untracked or unreadable. */
+  status: AppStatus.nullable(),
 });
 export type ResolveResponse = z.infer<typeof ResolveResponse>;
+
+export const OpenRequest = z.object({
+  folder: z.string().min(1),
+});
+export type OpenRequest = z.infer<typeof OpenRequest>;
+
+export const OpenResponse = z.object({
+  via: z.enum(["code", "finder"]),
+});
+export type OpenResponse = z.infer<typeof OpenResponse>;

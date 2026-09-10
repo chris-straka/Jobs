@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { pkgDir, startStatic } from "./helpers.js";
 
@@ -94,6 +94,90 @@ test("content script extracts the posting from the real bundle", async ({ page }
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
     expect(store["fpReported"]).toContain("127.0.0.1");
+  } finally {
+    site.close();
+  }
+});
+
+/** Fake background that answers pill state and records every message type. */
+async function bootPill(page: Page, pillState: { tracked: boolean; applied: boolean }): Promise<void> {
+  await page.addInitScript((state: { tracked: boolean; applied: boolean }) => {
+    const listeners: MessageListener[] = [];
+    const messages: string[] = [];
+    const fakeChrome = {
+      runtime: {
+        onMessage: {
+          addListener: (fn: MessageListener): void => {
+            listeners.push(fn);
+          },
+        },
+        sendMessage: (msg: { type?: string }): Promise<unknown> => {
+          messages.push(msg?.type ?? "");
+          if (msg?.type === "JAT_PILL_STATE") return Promise.resolve(state);
+          if (msg?.type === "JAT_MARK_APPLIED") return Promise.resolve({ ok: true });
+          if (msg?.type === "JAT_OPEN") return Promise.resolve({ ok: true, via: "popup" });
+          return Promise.resolve({ ok: true });
+        },
+      },
+      storage: {
+        local: {
+          get: (): Promise<Record<string, unknown>> => Promise.resolve({}),
+          set: (): Promise<void> => Promise.resolve(),
+        },
+      },
+    };
+    const w = window as unknown as { chrome?: unknown } & {
+      __jatMessages?: string[];
+    };
+    w.chrome = fakeChrome;
+    w.__jatMessages = messages;
+  }, pillState);
+}
+
+async function messages(page: Page): Promise<string[]> {
+  return page.evaluate(
+    () => (window as unknown as { __jatMessages?: string[] }).__jatMessages ?? [],
+  );
+}
+
+test("tracked draft pill swaps false-positive for mark applied", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: true, applied: false });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");
+    await expect(page.locator("#jat-pill button[data-act='mark']")).toHaveText("Mark applied ✓");
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveCount(0);
+
+    // Mark applied confirms through the background resolve.
+    await page.locator("#jat-pill button[data-act='mark']").click();
+    await expect(page.locator("#jat-pill")).toContainText("Marked applied ✓");
+    expect(await messages(page)).toContain("JAT_MARK_APPLIED");
+
+    // Open routes through the background and dismisses the pill on success.
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+    await page.locator("#jat-pill button[data-act='open']").click();
+    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    expect(await messages(page)).toContain("JAT_OPEN");
+  } finally {
+    site.close();
+  }
+});
+
+test("tracked applied pill shows only open and dismiss", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: true, applied: true });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");
+    await expect(page.locator("#jat-pill button")).toHaveCount(2);
+    await expect(page.locator("#jat-pill button[data-act='mark']")).toHaveCount(0);
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveCount(0);
   } finally {
     site.close();
   }

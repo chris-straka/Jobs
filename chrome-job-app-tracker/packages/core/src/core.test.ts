@@ -7,7 +7,8 @@ import { addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
-import { listApplications, setApplicationStatus } from "./status.js";
+import { openApplicationFolder } from "./open.js";
+import { listApplications, readApplicationStatus, setApplicationStatus } from "./status.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const jobsRoot = path.resolve(here, "..", "..", "..", "..");
@@ -110,6 +111,53 @@ describe("readSavedDescription", () => {
     const { folder } = addApplication(root, INPUT, "2026-09-09");
     expect(readSavedDescription(root, folder)).toBe(INPUT.description.trim());
     expect(readSavedDescription(root, "applications/9999-99-99_nope_x")).toBeNull();
+  });
+});
+
+describe("readApplicationStatus", () => {
+  it("tracks draft → applied and null for unknown folders", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    expect(readApplicationStatus(root, folder)).toBe("draft");
+    setApplicationStatus(root, folder, "applied");
+    expect(readApplicationStatus(root, folder)).toBe("applied");
+    expect(readApplicationStatus(root, "applications/9999-99-99_nope_x")).toBeNull();
+  });
+});
+
+describe("openApplicationFolder", () => {
+  it("prefers code when the CLI exists, Finder otherwise", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    const calls: string[][] = [];
+    const withCode = (cmd: string, args: string[]): { status: number | null; output: string } => {
+      calls.push([cmd, ...args]);
+      if (cmd === "sh") return { status: 0, output: "/usr/local/bin/code\n" };
+      return { status: 0, output: "" };
+    };
+    expect(openApplicationFolder(root, folder, withCode)).toEqual({ via: "code" });
+    expect(calls[1][0]).toBe("code");
+    expect(calls[1][1]).toContain(folder);
+
+    const calls2: string[][] = [];
+    const withoutCode = (cmd: string, args: string[]): { status: number | null; output: string } => {
+      calls2.push([cmd, ...args]);
+      if (cmd === "sh") return { status: 1, output: "" };
+      return { status: 0, output: "" };
+    };
+    expect(openApplicationFolder(root, folder, withoutCode)).toEqual({ via: "finder" });
+    expect(calls2[1][0]).toBe("open");
+  });
+
+  it("throws for missing folders and failed openers", async () => {
+    const root = await mkRoot();
+    const ok = (): { status: number | null; output: string } => ({ status: 0, output: "" });
+    expect(() => openApplicationFolder(root, "applications/9999-99-99_nope_x", ok)).toThrow(
+      /no such folder/,
+    );
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    const failing = (): { status: number | null; output: string } => ({ status: 1, output: "" });
+    expect(() => openApplicationFolder(root, folder, failing)).toThrow(/could not open/);
   });
 });
 

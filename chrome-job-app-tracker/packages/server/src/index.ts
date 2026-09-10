@@ -5,6 +5,8 @@ import {
   CaptureRequest,
   CaptureResponse,
   HealthResponse,
+  OpenRequest,
+  OpenResponse,
   ResolveResponse,
   StatusRequest,
   StatusResponse,
@@ -18,6 +20,8 @@ import {
   buildResumes,
   findByUrl,
   loadLibrary,
+  openApplicationFolder,
+  readApplicationStatus,
   readSavedDescription,
   setApplicationStatus,
 } from "@jat/core";
@@ -85,6 +89,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           ResolveResponse.parse({
             folder,
             description: folder ? readSavedDescription(root, folder) : null,
+            status: folder ? readApplicationStatus(root, folder) : null,
           }),
         );
         return;
@@ -109,6 +114,27 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           return;
         }
         json(res, 200, StatusResponse.parse(parsed.data));
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/open") {
+        let body: unknown;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          json(res, 400, { error: "invalid JSON body" });
+          return;
+        }
+        const parsed = OpenRequest.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: "invalid open request", issues: parsed.error.issues });
+          return;
+        }
+        try {
+          const { via } = openApplicationFolder(root, parsed.data.folder);
+          json(res, 200, OpenResponse.parse({ via }));
+        } catch (err) {
+          json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+        }
         return;
       }
       if (req.method === "POST" && req.url === "/api/capture") {
