@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  APPLY_TEXT,
   cleanText,
   detectTrack,
   dropJunkLines,
@@ -11,6 +12,35 @@ import {
   postingSignals,
   samePostingText,
 } from "./extract.js";
+
+describe("APPLY_TEXT", () => {
+  it("matches real apply controls", () => {
+    for (const label of [
+      "Apply",
+      "Apply now",
+      "APPLY FOR THIS JOB",
+      "Easy Apply",
+      "Submit Application",
+      "Submit application",
+    ]) {
+      expect(APPLY_TEXT.test(label)).toBe(true);
+    }
+  });
+
+  it("rejects noun-only labels like docs navigation", () => {
+    for (const label of [
+      "Application",
+      "Applications",
+      "macOS Application Bundle",
+      "Send Application",
+      "Reapply",
+      "Applying changes",
+      "Submit",
+    ]) {
+      expect(APPLY_TEXT.test(label)).toBe(false);
+    }
+  });
+});
 
 describe("cleanText", () => {
   it("collapses whitespace", () => {

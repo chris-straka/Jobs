@@ -125,6 +125,11 @@ test("content script extracts the posting from the real bundle", async ({ page }
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
     expect(afterUndo["falsePositives"] ?? []).not.toContain("127.0.0.1");
+    // Reporting again re-arms the confirm, which dismisses itself: the
+    // toast is a receipt, not a workspace.
+    await page.locator("#jat-pill button[data-act='no']").click();
+    await expect(page.locator("#jat-pill")).toContainText("Added to the");
+    await expect(page.locator("#jat-pill")).toBeHidden({ timeout: 15000 });
   } finally {
     site.close();
   }

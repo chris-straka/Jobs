@@ -67,8 +67,13 @@ export function dropJunkLines(text: string): string {
   return out.join("\n");
 }
 
-/** Matches clickable apply controls: "Apply now", "Easy Apply", "Submit application". */
-export const APPLY_TEXT = /appl(y|ication)|submit.*application|easy apply/i;
+/**
+ * Matches clickable apply controls: "Apply now", "Easy Apply", "Submit
+ * application". The verb must stand alone — bare-noun labels like a docs
+ * sidebar's "Application" or "macOS Application Bundle" link are navigation,
+ * not a call to action, and must not count.
+ */
+export const APPLY_TEXT = /\bapply\b|submit.*application/i;
 
 /**
  * Heuristic page classifier. Each signal is weak alone (your old extension

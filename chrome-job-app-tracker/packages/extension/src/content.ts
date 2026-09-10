@@ -302,6 +302,7 @@ function reminderPill(mode: PillMode): void {
                   void chrome.runtime.sendMessage({ type: "JAT_OPEN_DASHBOARD" }).catch(() => {});
                 },
                 undo: () => {
+                  clearFpConfirmTimer();
                   void chrome.runtime
                     .sendMessage({ type: "JAT_FP_UNREPORT", host: location.hostname })
                     .then((u: unknown) => {
@@ -310,9 +311,13 @@ function reminderPill(mode: PillMode): void {
                       }
                     });
                 },
-                x: removePill,
+                x: () => {
+                  clearFpConfirmTimer();
+                  removePill();
+                },
               },
             );
+            armFpConfirmTimer();
           } else {
             showPill(`<div>Already saved ✓ — can't mute a tracked posting.</div>`, {
               x: removePill,
@@ -380,6 +385,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 /** Last rendered reminder variant, so Undo can put it back. */
 let pillMode: PillMode = "untracked";
+
+/**
+ * Mute-confirm auto-dismiss. The toast is a receipt, not a workspace: it
+ * clears itself after a few seconds, long enough to hit Undo. Any manual
+ * dismissal clears the timer first so it can't remove a later pill.
+ */
+const FP_CONFIRM_MS = 6000;
+let fpConfirmTimer: number | undefined;
+
+function clearFpConfirmTimer(): void {
+  window.clearTimeout(fpConfirmTimer);
+  fpConfirmTimer = undefined;
+}
+
+function armFpConfirmTimer(): void {
+  clearFpConfirmTimer();
+  fpConfirmTimer = window.setTimeout(removePill, FP_CONFIRM_MS);
+}
 
 void (async () => {
   if (await denied()) return;
