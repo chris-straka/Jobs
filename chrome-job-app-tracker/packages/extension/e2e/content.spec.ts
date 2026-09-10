@@ -82,9 +82,10 @@ test("content script extracts the posting from the real bundle", async ({ page }
     expect(result.posting?.description).not.toContain("Apply now");
     expect(result.posting?.description).not.toContain("soup");
 
-    // Auto-pill fired (apply button + substance) with reasons shown.
-    await expect(page.locator("#jat-pill")).toContainText("Save this job?");
-    await expect(page.locator("#jat-pill")).toContainText("apply button");
+    // Pill is three buttons and nothing else.
+    await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
+    await expect(page.locator("#jat-pill")).not.toContainText("Save this job?");
 
     // "False positive" hides the pill and records this host.
     await page.locator("#jat-pill button[data-act='no']").click();

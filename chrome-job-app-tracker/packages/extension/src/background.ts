@@ -55,6 +55,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     );
     return true;
   }
+  if (msg?.type === "JAT_OPEN_POPUP") {
+    // Best effort: opening the popup requires user activation, which does
+    // not always survive the hop from content script to worker.
+    void (async () => {
+      try {
+        await chrome.action.openPopup();
+        sendResponse({ ok: true });
+      } catch {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "JAT_SHOW_BADGE") {
     if (sender.tab?.id !== undefined) {
       void chrome.action

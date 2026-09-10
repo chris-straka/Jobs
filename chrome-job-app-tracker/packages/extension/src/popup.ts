@@ -213,30 +213,6 @@ async function nativeStop(): Promise<void> {
   await refreshNative();
 }
 
-async function renderFpList(): Promise<void> {
-  const stored = await chrome.storage.local.get(["fpHosts"]);
-  const hosts = Array.isArray(stored.fpHosts)
-    ? stored.fpHosts.filter((h): h is string => typeof h === "string")
-    : [];
-  el("fp-count").textContent = String(hosts.length);
-  const ul = el("fp-list");
-  ul.replaceChildren();
-  for (const host of hosts.sort()) {
-    const li = document.createElement("li");
-    li.textContent = `${host} `;
-    const rm = document.createElement("button");
-    rm.textContent = "✕";
-    rm.type = "button";
-    rm.addEventListener("click", () => {
-      void chrome.storage.local
-        .set({ fpHosts: hosts.filter((h) => h !== host) })
-        .then(() => void renderFpList());
-    });
-    li.appendChild(rm);
-    ul.appendChild(li);
-  }
-}
-
 async function currentTab(): Promise<chrome.tabs.Tab> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
@@ -284,7 +260,7 @@ async function prefill(): Promise<void> {
   (el("role") as HTMLInputElement).value = title;
   (el("description") as HTMLTextAreaElement).value = description;
   updateCount();
-  updateTrack();
+  (el("track") as HTMLSelectElement).value = detectTrack(title, description);
   const detected = title.trim() !== "" || description.trim() !== "";
   el("capture-form").hidden = !detected;
   el("empty-state").hidden = detected;
@@ -297,11 +273,36 @@ function updateCount(): void {
   el("count").textContent = `(${n} chars)`;
 }
 
-/** Live track badge — the same detector save() uses. */
-function updateTrack(): void {
-  const role = (el("role") as HTMLInputElement).value;
-  const description = (el("description") as HTMLTextAreaElement).value;
-  el("track-badge").textContent = detectTrack(role, description).toUpperCase();
+/** Absolute checkout path of a saved folder, for the result links. */
+function savedAbsPath(folder: string): string | null {
+  if (!serverRoot) return null;
+  return `${serverRoot.replace(/\/+$/, "")}/${folder}`;
+}
+
+/**
+ * Swap the form for the result: links that open the saved folder plus
+ * the (relocated) Mark applied button.
+ */
+function showResult(folder: string): void {
+  el("capture-form").hidden = true;
+  el("empty-state").hidden = true;
+  const links = el("result-links");
+  links.replaceChildren();
+  const abs = savedAbsPath(folder);
+  if (abs) {
+    const vs = document.createElement("a");
+    vs.id = "open-saved";
+    vs.href = `vscode://file${abs}`;
+    vs.textContent = "Open in VS Code";
+    const fd = document.createElement("a");
+    fd.href = `file://${abs}`;
+    fd.textContent = "Reveal in Finder";
+    links.append(vs, fd);
+  } else {
+    links.textContent = `Saved under ${folder} (Jobs root unknown).`;
+  }
+  el("result-actions").prepend(el("mark-applied"));
+  el("result").hidden = false;
 }
 
 /**
@@ -322,7 +323,7 @@ async function save(): Promise<void> {
   }
   const role = (el("role") as HTMLInputElement).value.trim();
   const description = (el("description") as HTMLTextAreaElement).value;
-  const track = detectTrack(role, description);
+  const track = (el("track") as HTMLSelectElement).value;
   const parsed = CaptureRequest.safeParse({
     url: tabUrl,
     company: (el("company") as HTMLInputElement).value.trim(),
@@ -360,6 +361,7 @@ async function save(): Promise<void> {
     return;
   }
   const { folder, buildOk, fit, model, draft } = out.data;
+  showResult(folder);
   const lines = [
     `Saved ${folder}`,
     `Build: ${buildOk ? "ok, one page" : "FAILED — see terminal"}`,
@@ -416,8 +418,6 @@ async function markApplied(): Promise<void> {
 
 document.addEventListener("DOMContentLoaded", () => {
   (el("description") as HTMLTextAreaElement).addEventListener("input", updateCount);
-  (el("role") as HTMLInputElement).addEventListener("input", updateTrack);
-  (el("description") as HTMLTextAreaElement).addEventListener("input", updateTrack);
   el("manual-entry").addEventListener("click", () => {
     el("empty-state").hidden = true;
     el("capture-form").hidden = false;
@@ -431,7 +431,11 @@ document.addEventListener("DOMContentLoaded", () => {
     void (nativeRunning ? nativeStop() : nativeStart());
   });
   el("open-dashboard").addEventListener("click", () => void openDashboard());
-  void renderFpList();
+  el("capture-another").addEventListener("click", () => {
+    el("save-row").appendChild(el("mark-applied"));
+    el("result").hidden = true;
+    el("capture-form").hidden = false;
+  });
   void (async () => {
     await prefill();
     await checkHealth();

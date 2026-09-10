@@ -91,21 +91,24 @@
       }
       .pill .swap > * {
         grid-area: 1 / 1;
+        justify-self: start;
+        text-align: left;
+        white-space: nowrap;
         transition:
           opacity 0.18s ease,
-          translate 0.18s ease;
+          transform 0.18s ease;
       }
       #health-action {
         opacity: 0;
-        translate: 0 5px;
+        transform: translateY(5px);
       }
       .pill:hover:not(:disabled) #health-action {
         opacity: 1;
-        translate: 0 0;
+        transform: none;
       }
       .pill:hover:not(:disabled) #health-text {
         opacity: 0;
-        translate: 0 -5px;
+        transform: translateY(-5px);
       }
       #health-dot {
         width: 8px;
@@ -129,9 +132,13 @@
         }
       }
       #open-dashboard {
-        margin-top: 6px;
-        padding: 5px 12px;
+        margin-left: auto;
+        width: auto;
+        margin-top: 0;
+        padding: 5px 14px;
         font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
       }
       /* Empty state replaces the form when nothing was detected. */
       #empty-state {
@@ -184,10 +191,11 @@
         height: 120px;
         resize: vertical;
       }
-      /* Region is two letters; track badge takes the rest of the row. */
+      /* Region and track ride side by side, both compact. */
       .meta-grid {
         display: grid;
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto auto;
+        justify-content: start;
         gap: 8px;
         align-items: end;
         margin-top: 10px;
@@ -195,28 +203,30 @@
       .meta-grid .field-label {
         margin-top: 0;
       }
-      #region {
+      #region,
+      #track {
         width: auto;
         min-width: 78px;
         cursor: pointer;
       }
-      .track {
-        justify-self: end;
-        text-align: right;
+      .btn-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
       }
-      .track .field-label {
+      .btn-row button {
         margin-top: 0;
       }
-      #track-badge {
-        display: inline-block;
-        min-width: 46px;
-        text-align: center;
+      #result-title {
+        margin: 10px 0 2px;
+        font-weight: 600;
+      }
+      #result-links a {
+        display: block;
+        margin-top: 6px;
+        color: var(--accent);
         font-size: 12px;
-        font-weight: 700;
-        padding: 7px 12px;
-        border-radius: 999px;
-        background: var(--panel);
-        border: 1px solid var(--border);
       }
       button {
         width: 100%;
@@ -295,26 +305,6 @@
           transform: translate(-50%, 6px);
         }
       }
-      #fp-wrap {
-        margin-top: 10px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-      #fp-wrap summary {
-        cursor: pointer;
-        font-weight: 600;
-        width: fit-content;
-      }
-      #fp-list {
-        margin: 6px 0 0;
-        padding-left: 18px;
-      }
-      #fp-list button {
-        width: auto;
-        margin: 0 0 0 6px;
-        padding: 1px 8px;
-        font-size: 11px;
-      }
       @media (prefers-reduced-motion: reduce) {
         *,
         *::before,
@@ -331,6 +321,7 @@
         <span id="health-dot"></span>
         <span class="swap"><span id="health-text">Checking server…</span><span id="health-action"></span></span>
       </button>
+      <button id="open-dashboard" type="button">Managed</button>
     </div>
     <div id="copy-row"><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
     <div id="host-hint" class="hint" hidden></div>
@@ -354,22 +345,29 @@
             <option value="uk">UK</option>
           </select>
         </div>
-        <div class="track">
-          <span class="field-label">Track</span>
-          <span id="track-badge">SWE</span>
+        <div>
+          <label class="field-label" for="track">Track</label>
+          <select id="track">
+            <option value="swe">SWE</option>
+            <option value="csa">CSA</option>
+          </select>
         </div>
       </div>
       <label class="field-label" for="description">Posting text <span id="count"></span></label>
       <textarea id="description"></textarea>
-      <button id="save" class="primary" type="button">Save to Jobs repo</button>
-      <button id="mark-applied" type="button">Mark applied ✓</button>
+      <div class="btn-row" id="save-row">
+        <button id="save" class="primary" type="button">Save to Jobs repo</button>
+        <button id="mark-applied" type="button">Mark applied ✓</button>
+      </div>
+    </div>
+    <div id="result" hidden>
+      <p id="result-title">Saved ✓</p>
+      <div id="result-links"></div>
+      <div class="btn-row" id="result-actions">
+        <button id="capture-another" type="button">Capture another</button>
+      </div>
     </div>
     <div id="status"></div>
-    <details id="fp-wrap">
-      <summary>Ignored sites (<span id="fp-count">0</span>)</summary>
-      <ul id="fp-list"></ul>
-    </details>
-    <button id="open-dashboard" type="button">Manage ignored sites</button>
     <script src="dist/popup.js"></script>
   </body>
 </html>

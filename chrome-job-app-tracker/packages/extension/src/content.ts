@@ -156,7 +156,7 @@ function showPill(html: string, actions: Record<string, () => void>): void {
   const pill = document.createElement("div");
   pill.id = PILL_ID;
   pill.style.cssText =
-    "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:320px;" +
+    "position:fixed;right:16px;top:16px;z-index:2147483647;max-width:340px;" +
     `background:${dark ? "#1e1e1e" : "#fff"};color:${dark ? "#e8e8e8" : "#111"};` +
     `border:1px solid ${dark ? "#555" : "#ccc"};border-radius:14px;padding:12px 14px;` +
     "font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)";
@@ -171,14 +171,19 @@ function showPill(html: string, actions: Record<string, () => void>): void {
   document.body.appendChild(pill);
 }
 
-function reminderPill(reasons: string[]): void {
+function reminderPill(): void {
   showPill(
-    `<div><b>Save this job?</b> (${reasons.join(" + ")})<br/>` +
-      `Click the extension icon to capture it.</div>` +
-      `<div style="margin-top:8px;display:flex;gap:8px">` +
+    `<div style="display:flex;gap:8px">` +
+      `<button data-act="open">Open</button>` +
       `<button data-act="no">False positive</button>` +
       `<button data-act="x">✕</button></div>`,
     {
+      // The popup opens with the form prefilled; the background owns the
+      // openPopup call because content scripts cannot open it directly.
+      open: () => {
+        removePill();
+        void chrome.runtime.sendMessage({ type: "JAT_OPEN_POPUP" }).catch(() => {});
+      },
       no: () => {
         void chrome.runtime
           .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname })
@@ -257,7 +262,7 @@ void (async () => {
     title: posting.title,
   });
   if (verdict.isPosting) {
-    reminderPill(verdict.reasons);
+    reminderPill();
     try {
       await chrome.runtime.sendMessage({ type: "JAT_SHOW_BADGE" });
     } catch {

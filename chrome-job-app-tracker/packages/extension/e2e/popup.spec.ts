@@ -62,9 +62,10 @@ test("popup save creates an application through the real server", async ({ page,
     await page.locator("#role").fill("Backend Engineer");
     await page.locator("#description").fill(JD);
 
-    // No server field or track input; copy fallback visible without a host.
+    // No server field; track is a dropdown defaulting to the detected track.
     await expect(page.locator("#server")).toHaveCount(0);
-    await expect(page.locator("#track")).toHaveCount(0);
+    await expect(page.locator("#track")).toBeVisible();
+    await expect(page.locator("#track")).toHaveValue("swe");
     await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
 
@@ -72,6 +73,13 @@ test("popup save creates an application through the real server", async ({ page,
       timeout: 30000,
     });
     await expect(page.locator("#status")).toContainText("Best match: telemetry");
+
+    // The form gives way to the result: opener links plus mark-applied.
+    await expect(page.locator("#capture-form")).toBeHidden();
+    await expect(page.locator("#open-saved")).toHaveAttribute(
+      "href",
+      /vscode:\/\/file.*applications\//,
+    );
 
     const apps = await readdir(path.join(dir, "applications"));
     expect(apps).toHaveLength(1);
