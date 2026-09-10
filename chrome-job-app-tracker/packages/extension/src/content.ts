@@ -391,7 +391,7 @@ let pillMode: PillMode = "untracked";
  * clears itself after a few seconds, long enough to hit Undo. Any manual
  * dismissal clears the timer first so it can't remove a later pill.
  */
-const FP_CONFIRM_MS = 6000;
+const FP_CONFIRM_MS = 5000;
 let fpConfirmTimer: number | undefined;
 
 function clearFpConfirmTimer(): void {
