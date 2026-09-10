@@ -139,16 +139,30 @@ test("popup save creates an application through the real server", async ({ page,
     await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
 
-    // The form gives way to the result: build state, opener links, mark-applied.
+    // The form gives way to the result: merged title, one opener link at the
+    // bottom, and a centered mark-applied.
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
-    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#result-title")).toContainText("Saved ✓ Resume built · one page");
+    await expect(page.locator("#build-line")).toBeHidden();
     await expect(page.locator("#draft-line")).toBeHidden();
     await expect(page.locator("#notes-line")).toBeHidden();
     await expect(page.locator("#capture-form")).toBeHidden();
+    await expect(page.locator("#result-links a")).toHaveCount(1);
     await expect(page.locator("#open-saved")).toHaveAttribute(
       "href",
       /vscode:\/\/file.*applications\//,
     );
+    await expect(page.locator("#result")).not.toContainText("Finder");
+    // The VS Code link renders after the tailored/notes lines.
+    const linkAfterNotes = await page.evaluate(() => {
+      const link = document.getElementById("open-saved");
+      const notes = document.getElementById("notes-line");
+      if (!link || !notes) return false;
+      return Boolean(link.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_PRECEDING);
+    });
+    expect(linkAfterNotes).toBe(true);
+    // Mark applied is the only action: it sits centered, not grid-stretched.
+    await expect(page.locator("#result-actions")).toHaveCSS("justify-content", "center");
 
     const apps = await readdir(path.join(dir, "applications"));
     expect(apps).toHaveLength(1);
@@ -353,7 +367,7 @@ test("pill-open handoff prefills from stash when the tab URL is hidden", async (
     await page.locator("#company").fill("Acme");
     await page.locator("#save").click();
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
-    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#result-title")).toContainText("Saved ✓ Resume built · one page");
     const apps = await readdir(path.join(dir, "applications"));
     expect(apps).toHaveLength(1);
     const jobMd = await readFile(path.join(dir, "applications", apps[0], "job.md"), "utf8");
@@ -422,7 +436,7 @@ test("tracked posting reopens in saved state, not the form", async ({ page }) =>
     await page.locator("#company").fill("Acme");
     await page.locator("#save").click();
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
-    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#result-title")).toContainText("Saved ✓ Resume built · one page");
 
     // Same URL, same text: the form gives way to the saved state.
     await page.reload();
@@ -786,7 +800,7 @@ test("save shows live capture stages, then the draft and notes lines", async ({ 
     await expect(page.locator("#status")).toContainText("Writing interview notes");
 
     await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
-    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#result-title")).toContainText("Saved ✓ Resume built · one page");
     await expect(page.locator("#draft-line")).toContainText("Tailored with 5 bullets in 1m 23s");
     await expect(page.locator("#notes-line")).toContainText("Interview notes ready in notes.md");
     const calls = await page.evaluate(

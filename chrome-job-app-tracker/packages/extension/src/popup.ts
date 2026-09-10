@@ -376,28 +376,34 @@ function savedAbsPath(folder: string): string | null {
   return `${serverRoot.replace(/\/+$/, "")}/${folder}`;
 }
 
-/** Opener links for a saved folder, shared by the result and saved states. */
+/** Opener link for a saved folder, shared by the result and saved states. */
 function renderLinks(folder: string): void {
   const links = el("result-links");
   links.replaceChildren();
   const abs = savedAbsPath(folder);
-  if (abs) {
-    const vs = document.createElement("a");
-    vs.id = "open-saved";
-    vs.href = `vscode://file${abs}`;
-    vs.textContent = "Open in VS Code";
-    const fd = document.createElement("a");
-    fd.href = `file://${abs}`;
-    fd.textContent = "Reveal in Finder";
-    links.append(vs, fd);
-  } else {
+  if (!abs) {
     links.textContent = `Saved under ${folder} (Jobs root unknown).`;
+    return;
   }
+  const vs = document.createElement("a");
+  vs.id = "open-saved";
+  vs.href = `vscode://file${abs}`;
+  vs.textContent = "Open in VS Code";
+  // Protocol clicks fail silently when VS Code isn't installed: nothing
+  // handles the link, so the popup never loses focus. No blur within the
+  // window means the handoff went nowhere — say so instead of nothing.
+  vs.addEventListener("click", () => {
+    const timer = window.setTimeout(() => {
+      alert("VS Code didn't open — install it from https://code.visualstudio.com, then try again.");
+    }, 1500);
+    window.addEventListener("blur", () => window.clearTimeout(timer), { once: true });
+  });
+  links.append(vs);
 }
 
 /**
  * Tracked URL, unchanged text: the posting is already saved, so there is
- * no form — just the opener links and an enabled Mark applied. The save
+ * no form — just the opener link and an enabled Mark applied. The save
  * collision path passes markEnabled=false when the form text does not
  * match the folder, so a same-slug different posting is never one click
  * away from being marked applied.
@@ -421,9 +427,9 @@ function showSavedState(folder: string, markEnabled = true): void {
 }
 
 /**
- * Swap the form for the result: opener links, one build line, one draft
- * line, and the (relocated) Mark applied button. No dumps — the details
- * live in the repo, not the popup.
+ * Swap the form for the result: a merged title/build line, one draft line,
+ * one notes line, the VS Code link at the bottom, and the (relocated) Mark
+ * applied button. No dumps — the details live in the repo, not the popup.
  */
 function showResult(
   folder: string,
@@ -435,10 +441,16 @@ function showResult(
 ): void {
   el("capture-form").hidden = true;
   el("empty-state").hidden = true;
-  el("result-title").textContent = "Saved ✓";
   renderLinks(folder);
   const buildLine = el("build-line");
-  buildLine.textContent = buildOk ? "Resume built · one page" : "Build failed";
+  if (buildOk) {
+    el("result-title").textContent = "Saved ✓ Resume built · one page";
+    buildLine.hidden = true;
+  } else {
+    el("result-title").textContent = "Saved ✓";
+    buildLine.hidden = false;
+    buildLine.textContent = "Build failed";
+  }
   buildLine.classList.toggle("fail", !buildOk);
   const output = el("build-output");
   output.hidden = buildOk;

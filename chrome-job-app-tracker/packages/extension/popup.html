@@ -218,6 +218,12 @@
       .btn-row button {
         margin-top: 0;
       }
+      /* Mark applied is the only result action: center it instead of
+         stretching it across a two-column grid built for pairs. */
+      #result-actions:has(> :only-child) {
+        display: flex;
+        justify-content: center;
+      }
       #result-title {
         margin: 10px 0 2px;
         font-weight: 600;
@@ -423,11 +429,11 @@
     </div>
     <div id="result" hidden>
       <p id="result-title">Saved ✓</p>
-      <div id="result-links"></div>
       <p id="build-line"></p>
       <pre id="build-output" hidden></pre>
       <p id="draft-line" hidden></p>
       <p id="notes-line" hidden></p>
+      <div id="result-links"></div>
       <div class="btn-row" id="result-actions"></div>
     </div>
     <div id="status"></div>
