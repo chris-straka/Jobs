@@ -57,6 +57,29 @@ const SUFFIX = new Set([
 
 export { slug };
 
+/**
+ * Host from a pasted posting URL or a bare host. A scheme is prepended when
+ * missing, so `example.com/jobs/1` and full URLs both resolve; the port is
+ * dropped, matching the pill's own `location.hostname` reports. Null when
+ * no host can be read.
+ *
+ * @param raw pasted URL or typed host
+ */
+export function hostFromUrlOrHost(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t) ? t : `https://${t}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (!host || /[\s/:]/.test(host)) return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
 /** Query params that identify the visit, never the posting. */
 const TRACKING_PARAM =
   /^(utm_.*|fbclid|gclid|gclsrc|msclkid|mc_.*|igshid|_ga|_gl|vero_.*|mkt_.*|trk|trkInfo|li_fat_id|yclid|wbraid|gbraid|srsltid)$/i;

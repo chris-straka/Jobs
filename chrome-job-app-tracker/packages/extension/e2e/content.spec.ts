@@ -18,18 +18,18 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const listeners: MessageListener[] = [];
     const store: Record<string, unknown> = {};
     const messages: string[] = [];
-    // Stands in for background.ts: FP reports land in fpReported.
+    // Stands in for background.ts: FP reports land in falsePositives.
     const fakeBackground = (msg: { type?: string; host?: string }): unknown => {
       messages.push(msg?.type ?? "");
       if (msg?.type === "JAT_FP_REPORT" && msg.host) {
-        const hosts = Array.isArray(store["fpReported"]) ? store["fpReported"] : [];
+        const hosts = Array.isArray(store["falsePositives"]) ? store["falsePositives"] : [];
         if (!(hosts as string[]).includes(msg.host)) {
-          store["fpReported"] = [...(hosts as string[]), msg.host];
+          store["falsePositives"] = [...(hosts as string[]), msg.host];
         }
       }
       if (msg?.type === "JAT_FP_UNREPORT" && msg.host) {
-        const hosts = Array.isArray(store["fpReported"]) ? store["fpReported"] : [];
-        store["fpReported"] = (hosts as string[]).filter((h) => h !== msg.host);
+        const hosts = Array.isArray(store["falsePositives"]) ? store["falsePositives"] : [];
+        store["falsePositives"] = (hosts as string[]).filter((h) => h !== msg.host);
       }
       return { ok: true };
     };
@@ -102,7 +102,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const store = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(store["fpReported"]).toContain("127.0.0.1");
+    expect(store["falsePositives"]).toContain("127.0.0.1");
     // "List" opens the Manage page without dismissing the confirm.
     await page.locator("#jat-pill a[data-act='dash']").click();
     expect(await messages(page)).toContain("JAT_OPEN_DASHBOARD");
@@ -114,7 +114,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const afterUndo = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(afterUndo["fpReported"] ?? []).not.toContain("127.0.0.1");
+    expect(afterUndo["falsePositives"] ?? []).not.toContain("127.0.0.1");
   } finally {
     site.close();
   }

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { IgnoreLists } from "@jat/shared";
+import { FalsePositives } from "@jat/shared";
 
 const IGNORE_DIR = ".jat";
 const IGNORE_FILE = "ignore.json";
@@ -22,34 +22,50 @@ export function normalizeHosts(hosts: unknown): string[] {
   ].sort();
 }
 
-export function normalizeIgnoreLists(lists: IgnoreLists): IgnoreLists {
-  return { fpReported: normalizeHosts(lists.fpReported), fpHosts: normalizeHosts(lists.fpHosts) };
+export function normalizeFalsePositives(list: FalsePositives): FalsePositives {
+  return { falsePositives: normalizeHosts(list.falsePositives) };
 }
 
-export function mergeIgnoreLists(a: IgnoreLists, b: IgnoreLists): IgnoreLists {
-  return normalizeIgnoreLists({
-    fpReported: [...a.fpReported, ...b.fpReported],
-    fpHosts: [...a.fpHosts, ...b.fpHosts],
-  });
+export function mergeFalsePositives(a: FalsePositives, b: FalsePositives): FalsePositives {
+  return normalizeFalsePositives({ falsePositives: [...a.falsePositives, ...b.falsePositives] });
 }
 
 /**
- * Durable mute lists. A missing or corrupt file reads as empty — the
- * dashboard merge heals it from browser storage on next load.
+ * Tolerant parse: the current `{ falsePositives }` shape, or the retired
+ * split `{ fpReported, fpHosts }` shape unioned into it. Null when neither
+ * matches.
  */
-export function readIgnoreLists(root: string): IgnoreLists {
+export function parseFalsePositives(body: unknown): FalsePositives | null {
+  const strict = FalsePositives.safeParse(body);
+  if (strict.success) return normalizeFalsePositives(strict.data);
+  if (typeof body === "object" && body !== null) {
+    const o = body as Record<string, unknown>;
+    if ("fpReported" in o || "fpHosts" in o) {
+      return normalizeFalsePositives({
+        falsePositives: [...normalizeHosts(o["fpReported"]), ...normalizeHosts(o["fpHosts"])],
+      });
+    }
+  }
+  return null;
+}
+
+/**
+ * Durable false-positives list. A missing or corrupt file reads as empty —
+ * the dashboard merge heals it from browser storage on next load. A legacy
+ * split-shape file reads unioned and is rewritten in the new shape on next
+ * write.
+ */
+export function readFalsePositives(root: string): FalsePositives {
   try {
-    const parsed = IgnoreLists.safeParse(
-      JSON.parse(readFileSync(ignorePath(root), "utf8")),
-    );
-    if (!parsed.success) return { fpReported: [], fpHosts: [] };
-    return normalizeIgnoreLists(parsed.data);
+    const parsed = parseFalsePositives(JSON.parse(readFileSync(ignorePath(root), "utf8")));
+    if (!parsed) return { falsePositives: [] };
+    return parsed;
   } catch {
-    return { fpReported: [], fpHosts: [] };
+    return { falsePositives: [] };
   }
 }
 
-export function writeIgnoreLists(root: string, lists: IgnoreLists): void {
+export function writeFalsePositives(root: string, list: FalsePositives): void {
   mkdirSync(path.join(root, IGNORE_DIR), { recursive: true });
-  writeFileSync(ignorePath(root), `${JSON.stringify(normalizeIgnoreLists(lists), null, 2)}\n`);
+  writeFileSync(ignorePath(root), `${JSON.stringify(normalizeFalsePositives(list), null, 2)}\n`);
 }

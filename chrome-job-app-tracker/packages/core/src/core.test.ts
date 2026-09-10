@@ -7,7 +7,12 @@ import { DuplicateApplication, addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
-import { mergeIgnoreLists, readIgnoreLists, writeIgnoreLists } from "./ignore.js";
+import {
+  mergeFalsePositives,
+  parseFalsePositives,
+  readFalsePositives,
+  writeFalsePositives,
+} from "./ignore.js";
 import { openApplicationFolder } from "./open.js";
 import { listApplications, readApplicationStatus, setApplicationStatus } from "./status.js";
 
@@ -133,17 +138,35 @@ describe("readApplicationStatus", () => {
   });
 });
 
-describe("ignore lists", () => {
-  it("round-trips normalized, merges, and matches hosts", async () => {
+describe("false positives", () => {
+  it("round-trips normalized and merges", async () => {
     const root = await mkRoot();
-    expect(readIgnoreLists(root)).toEqual({ fpReported: [], fpHosts: [] });
-    writeIgnoreLists(root, { fpReported: ["B.com ", "a.com", "a.com"], fpHosts: ["C.com"] });
-    expect(readIgnoreLists(root)).toEqual({ fpReported: ["a.com", "b.com"], fpHosts: ["c.com"] });
-    const merged = mergeIgnoreLists(readIgnoreLists(root), {
-      fpReported: ["d.com"],
-      fpHosts: ["c.com", "e.com"],
+    expect(readFalsePositives(root)).toEqual({ falsePositives: [] });
+    writeFalsePositives(root, { falsePositives: ["B.com ", "a.com", "a.com"] });
+    expect(readFalsePositives(root)).toEqual({ falsePositives: ["a.com", "b.com"] });
+    const merged = mergeFalsePositives(readFalsePositives(root), { falsePositives: ["d.com", "a.com"] });
+    expect(merged).toEqual({ falsePositives: ["a.com", "b.com", "d.com"] });
+  });
+
+  it("reads a legacy split-shape file unioned", async () => {
+    const root = await mkRoot();
+    await mkdir(path.join(root, ".jat"), { recursive: true });
+    await writeFile(
+      path.join(root, ".jat", "ignore.json"),
+      JSON.stringify({ fpReported: ["B.com "], fpHosts: ["c.com", "b.com"] }),
+    );
+    expect(readFalsePositives(root)).toEqual({ falsePositives: ["b.com", "c.com"] });
+  });
+
+  it("parses current and legacy bodies, rejects garbage", () => {
+    expect(parseFalsePositives({ falsePositives: ["A.com "] })).toEqual({
+      falsePositives: ["a.com"],
     });
-    expect(merged).toEqual({ fpReported: ["a.com", "b.com", "d.com"], fpHosts: ["c.com", "e.com"] });
+    expect(parseFalsePositives({ fpReported: ["a.com"], fpHosts: ["B.com"] })).toEqual({
+      falsePositives: ["a.com", "b.com"],
+    });
+    expect(parseFalsePositives({ falsePositives: "nope" })).toBeNull();
+    expect(parseFalsePositives({ nope: [] })).toBeNull();
   });
 });
 

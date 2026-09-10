@@ -186,7 +186,7 @@ async function refreshNative(): Promise<void> {
   el("host-hint").hidden = true;
 }
 
-/** The dashboard is an extension page: list, add, and remove ignored hosts. */
+/** The dashboard is an extension page: list, add, and remove false-positive hosts. */
 async function openDashboard(): Promise<void> {
   try {
     await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });

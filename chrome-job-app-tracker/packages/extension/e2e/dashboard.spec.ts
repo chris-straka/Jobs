@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { pkgDir, startStatic } from "./helpers.js";
 
-test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
+test("dashboard lists, adds, and removes false-positive hosts", async ({ page }) => {
   await page.addInitScript(() => {
     const store: Record<string, unknown> = {
       // Dead port: the dashboard must never touch an ambient real server.
       server: "http://127.0.0.1:1",
+      // Retired split keys: the dashboard unions and migrates them.
       fpReported: ["reported.example.com"],
       fpHosts: ["example.com", "jobs.example.org"],
     };
@@ -18,6 +19,10 @@ test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
           set: (obj: Record<string, unknown>): Promise<void> => {
             Object.assign(store, obj);
             for (const l of listeners) l(obj, "local");
+            return Promise.resolve();
+          },
+          remove: (keys: string[]): Promise<void> => {
+            for (const k of keys) delete store[k];
             return Promise.resolve();
           },
         },
@@ -36,42 +41,55 @@ test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
   const site = await startStatic(pkgDir);
   try {
     await page.goto(`${site.url}/dashboard.html`);
-    await expect(page.locator("#fp-list li")).toHaveCount(1);
-    await expect(page.locator("#fp-count")).toHaveText("1");
-    await expect(page.locator("#dash-list li")).toHaveCount(2);
-    await expect(page.locator("#dash-count")).toHaveText("2");
-
-    // Removing a false positive updates its own key.
-    await page.locator("#fp-list li", { hasText: "reported.example.com" }).locator("button").click();
-    await expect(page.locator("#fp-list li")).toHaveCount(0);
-    await expect(page.locator("#fp-empty")).toBeVisible();
+    // Legacy split keys show unioned under the one list, then migrate away.
+    await expect(page.locator("#fp-list li")).toHaveCount(3);
+    await expect(page.locator("#fp-count")).toHaveText("3");
+    const afterMigrate = await page.evaluate(
+      () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
+    );
+    expect(afterMigrate["falsePositives"]).toEqual([
+      "example.com",
+      "jobs.example.org",
+      "reported.example.com",
+    ]);
+    expect(afterMigrate["fpReported"]).toBeUndefined();
+    expect(afterMigrate["fpHosts"]).toBeUndefined();
 
     // Remove drops the row and the stored host.
-    await page.locator("#dash-list li", { hasText: "example.com" }).locator("button").click();
-    await expect(page.locator("#dash-list li")).toHaveCount(1);
+    await page.locator('#fp-list li:has(span:text-is("example.com")) button').click();
+    await expect(page.locator("#fp-list li")).toHaveCount(2);
     const afterRm = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(afterRm["fpHosts"]).toEqual(["jobs.example.org"]);
+    expect(afterRm["falsePositives"]).toEqual(["jobs.example.org", "reported.example.com"]);
 
-    // Add normalizes and stores a new host.
+    // The URL input adds the posting's host.
+    await page.locator("#add-url").fill("https://jobs.example.com/post/123?utm_source=x");
+    await page.locator("#add-form button[type='submit']").click();
+    await expect(page.locator("#fp-list li")).toHaveCount(3);
+    await expect(page.locator("#fp-count")).toHaveText("3");
+
+    // The host input normalizes and stores a bare host.
     await page.locator("#add-host").fill("  New-Site.com ");
     await page.locator("#add-form button[type='submit']").click();
-    await expect(page.locator("#dash-list li")).toHaveCount(2);
-    await expect(page.locator("#dash-count")).toHaveText("2");
+    await expect(page.locator("#fp-list li")).toHaveCount(4);
     const afterAdd = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(afterAdd["fpHosts"]).toContain("new-site.com");
+    expect(afterAdd["falsePositives"]).toContain("new-site.com");
 
-    // Duplicates don't double-add; garbage is rejected with an error.
+    // Duplicates don't double-add; garbage and empty submits show an error.
     await page.locator("#add-host").fill("new-site.com");
     await page.locator("#add-form button[type='submit']").click();
-    await expect(page.locator("#dash-list li")).toHaveCount(2);
-    await page.locator("#add-host").fill("not a host!!");
+    await expect(page.locator("#fp-list li")).toHaveCount(4);
+    await page.locator("#add-url").fill("not a url!!");
     await page.locator("#add-form button[type='submit']").click();
     await expect(page.locator("#form-error")).toBeVisible();
-    await expect(page.locator("#dash-list li")).toHaveCount(2);
+    await expect(page.locator("#fp-list li")).toHaveCount(4);
+    await page.locator("#add-url").fill("");
+    await page.locator("#add-form button[type='submit']").click();
+    await expect(page.locator("#form-error")).toBeVisible();
+    await expect(page.locator("#fp-list li")).toHaveCount(4);
   } finally {
     site.close();
   }

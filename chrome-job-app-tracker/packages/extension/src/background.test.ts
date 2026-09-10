@@ -28,6 +28,9 @@ const prevFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
       set: async (obj: Record<string, unknown>): Promise<void> => {
         Object.assign(localStore, obj);
       },
+      remove: async (keys: string[]): Promise<void> => {
+        for (const k of keys) delete localStore[k];
+      },
     },
     session: {
       get: async (keys: string[]): Promise<Record<string, unknown>> =>
@@ -224,7 +227,7 @@ describe("JAT_FP_REPORT", () => {
     expect(await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" })).toEqual({
       ok: true,
     });
-    expect(localStore["fpReported"]).toEqual(["example.com"]);
+    expect(localStore["falsePositives"]).toEqual(["example.com"]);
   });
 
   it("refuses tracked URLs — a saved posting is never a false positive", async () => {
@@ -232,7 +235,19 @@ describe("JAT_FP_REPORT", () => {
     expect(
       await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" }),
     ).toEqual({ ok: false, reason: "tracked" });
+    expect(localStore["falsePositives"]).toBeUndefined();
+  });
+
+  it("unions retired split keys and drops them on write", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    localStore["fpReported"] = ["old-reported.com"];
+    localStore["fpHosts"] = ["old-hand.com"];
+    expect(await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" })).toEqual({
+      ok: true,
+    });
+    expect(localStore["falsePositives"]).toEqual(["example.com", "old-hand.com", "old-reported.com"]);
     expect(localStore["fpReported"]).toBeUndefined();
+    expect(localStore["fpHosts"]).toBeUndefined();
   });
 });
 
@@ -240,18 +255,18 @@ describe("JAT_FP_UNREPORT", () => {
   it("removes the host and pushes storage to disk", async () => {
     routes.resolve = { ok: true, body: resolveBody(null) };
     await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" });
-    expect(localStore["fpReported"]).toEqual(["example.com"]);
+    expect(localStore["falsePositives"]).toEqual(["example.com"]);
     expect(await send("JAT_FP_UNREPORT", { host: "example.com" })).toEqual({ ok: true });
-    expect(localStore["fpReported"]).toEqual([]);
+    expect(localStore["falsePositives"]).toEqual([]);
     const pushes = fetchCalls.filter(
       (c) => c.url.includes("/api/ignore") && (c.init?.method ?? "GET") === "POST",
     );
     const last = pushes[pushes.length - 1];
     expect(last).toBeDefined();
     const body = JSON.parse((last?.init as { body?: string } | undefined)?.body ?? "{}") as {
-      fpReported?: string[];
+      falsePositives?: string[];
     };
-    expect(body.fpReported).toEqual([]);
+    expect(body.falsePositives).toEqual([]);
   });
 });
 

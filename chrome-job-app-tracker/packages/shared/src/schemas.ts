@@ -114,12 +114,11 @@ export const OpenResponse = z.object({
 });
 export type OpenResponse = z.infer<typeof OpenResponse>;
 
-/** Mute lists: pill reports (fpReported) and hand adds (fpHosts). */
-export const IgnoreLists = z.object({
-  fpReported: z.array(z.string()),
-  fpHosts: z.array(z.string()),
+/** The single false-positives list: every host the pill skips. */
+export const FalsePositives = z.object({
+  falsePositives: z.array(z.string()),
 });
-export type IgnoreLists = z.infer<typeof IgnoreLists>;
+export type FalsePositives = z.infer<typeof FalsePositives>;
 
 /**
  * Pill-to-popup handoff: the content script stashes the exact posting the

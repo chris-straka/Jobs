@@ -1,16 +1,14 @@
 import {
   PENDING_POSTING_KEY,
   PendingPosting,
-  IgnoreLists,
+  FalsePositives,
   OpenResponse,
   ResolveResponse,
   StatusResponse,
 } from "@jat/shared";
 
-interface StoredLists {
-  fpReported: string[];
-  fpHosts: string[];
-}
+/** Retired split keys: read for migration, never written. */
+const LEGACY_LIST_KEYS = ["fpReported", "fpHosts"];
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -57,30 +55,50 @@ function cleanStoredList(value: unknown): string[] {
     : [];
 }
 
-async function readStoredLists(): Promise<StoredLists> {
-  const stored = await chrome.storage.local.get(["fpReported", "fpHosts"]);
-  return { fpReported: cleanStoredList(stored.fpReported), fpHosts: cleanStoredList(stored.fpHosts) };
-}
-
-function unionLists(a: StoredLists, b: StoredLists): StoredLists {
-  return {
-    fpReported: [...new Set([...a.fpReported, ...b.fpReported])].sort(),
-    fpHosts: [...new Set([...a.fpHosts, ...b.fpHosts])].sort(),
-  };
+/**
+ * The live list, unioned with any retired split keys still sitting in
+ * storage from before the merge.
+ */
+async function readFalsePositives(): Promise<string[]> {
+  const stored = await chrome.storage.local.get(["falsePositives", ...LEGACY_LIST_KEYS]);
+  const all = ["falsePositives", ...LEGACY_LIST_KEYS].flatMap((k) => cleanStoredList(stored[k]));
+  return [...new Set(all)].sort();
 }
 
 /**
- * Push storage lists to disk after a local mutation (no union: the caller
- * just set storage, so it wins). Silent offline — storage stays live.
+ * Single writer: the merged list goes under one key and the retired keys
+ * are dropped, so a removal can never resurrect from a stale split list.
+ */
+async function writeFalsePositives(hosts: string[]): Promise<void> {
+  await chrome.storage.local.set({ falsePositives: [...new Set(hosts)].sort() });
+  await chrome.storage.local.remove([...LEGACY_LIST_KEYS]);
+}
+
+/** Server payload, current or retired shape — anything else is ignored. */
+function parseListPayload(body: unknown): string[] | null {
+  const strict = FalsePositives.safeParse(body);
+  if (strict.success) return [...new Set(strict.data.falsePositives)].sort();
+  if (typeof body === "object" && body !== null) {
+    const o = body as Record<string, unknown>;
+    if ("fpReported" in o || "fpHosts" in o) {
+      return [...new Set([...cleanStoredList(o["fpReported"]), ...cleanStoredList(o["fpHosts"])])].sort();
+    }
+  }
+  return null;
+}
+
+/**
+ * Push the storage list to disk after a local mutation (no union: the
+ * caller just set storage, so it wins). Silent offline — storage stays live.
  */
 async function pushIgnoreLists(): Promise<void> {
   try {
     const base = await serverBase();
-    const stored = await readStoredLists();
+    const falsePositives = await readFalsePositives();
     await fetch(`${base}/api/ignore`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(stored),
+      body: JSON.stringify({ falsePositives }),
     });
   } catch {
     // Offline — the file heals on the next online write.
@@ -88,23 +106,23 @@ async function pushIgnoreLists(): Promise<void> {
 }
 
 /**
- * Pull the on-disk lists into storage (union). Heals fresh profiles and
+ * Pull the on-disk list into storage (union). Heals fresh profiles and
  * hand-edited files; a removal made while offline may reappear once and
  * needs a second, online removal.
  */
 async function pullIgnoreLists(): Promise<void> {
   try {
     const base = await serverBase();
-    const stored = await readStoredLists();
+    const stored = await readFalsePositives();
     const res = await fetch(`${base}/api/ignore`);
-    const parsed = IgnoreLists.safeParse(await res.json());
-    if (!parsed.success) return;
-    const merged = unionLists(stored, parsed.data);
-    await chrome.storage.local.set(merged);
+    const pulled = parseListPayload(await res.json());
+    if (!pulled) return;
+    const merged = [...new Set([...stored, ...pulled])].sort();
+    await writeFalsePositives(merged);
     await fetch(`${base}/api/ignore`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(merged),
+      body: JSON.stringify({ falsePositives: merged }),
     });
   } catch {
     // Offline — storage is the live store; nothing to converge.
@@ -112,10 +130,10 @@ async function pullIgnoreLists(): Promise<void> {
 }
 
 /**
- * Pill reports land in fpReported, hand adds in fpHosts. The pill stays
- * hidden on both; the dashboard shows them as separate sections. A tracked
- * URL is never a false positive — the report is refused so a saved posting
- * can never be muted out of the pill.
+ * Every muted host lives in the one false-positives list, however it got
+ * there — pill report or dashboard add. A tracked URL is never a false
+ * positive: the report is refused so a saved posting can never be muted
+ * out of the pill.
  */
 async function reportFalsePositive(host: string, url: string): Promise<FpResult> {
   if (url) {
@@ -128,18 +146,18 @@ async function reportFalsePositive(host: string, url: string): Promise<FpResult>
       // Server offline — nothing tracked that we know of; record the report.
     }
   }
-  const stored = await readStoredLists();
-  if (!stored.fpReported.includes(host)) {
-    await chrome.storage.local.set({ fpReported: [...stored.fpReported, host] });
+  const stored = await readFalsePositives();
+  if (!stored.includes(host)) {
+    await writeFalsePositives([...stored, host]);
   }
   await pushIgnoreLists();
   return { ok: true };
 }
 
-/** Pill Undo: un-mute the host and push the on-disk lists. */
+/** Pill Undo: un-mute the host and push the on-disk list. */
 async function unreportFalsePositive(host: string): Promise<FpResult> {
-  const stored = await readStoredLists();
-  await chrome.storage.local.set({ fpReported: stored.fpReported.filter((h) => h !== host) });
+  const stored = await readFalsePositives();
+  await writeFalsePositives(stored.filter((h) => h !== host));
   await pushIgnoreLists();
   return { ok: true };
 }
@@ -246,7 +264,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "JAT_PILL_STATE") {
-    // Converge the on-disk mute lists into storage (unawaited): the next
+    // Converge the on-disk mute list into storage (unawaited): the next
     // page's denied() check then sees file entries too.
     void pullIgnoreLists();
     void pillState(String(msg.url ?? "")).then(sendResponse);

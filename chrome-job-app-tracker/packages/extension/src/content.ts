@@ -277,8 +277,8 @@ function appliedPill(): void {
 
 async function denied(): Promise<boolean> {
   try {
-    const stored = await chrome.storage.local.get(["fpHosts", "fpReported"]);
-    const hosts = ["fpHosts", "fpReported"].flatMap((k) =>
+    const stored = await chrome.storage.local.get(["falsePositives", "fpReported", "fpHosts"]);
+    const hosts = ["falsePositives", "fpReported", "fpHosts"].flatMap((k) =>
       Array.isArray(stored[k]) ? stored[k] : [],
     );
     return isDenied(

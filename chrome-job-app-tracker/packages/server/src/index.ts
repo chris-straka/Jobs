@@ -5,7 +5,6 @@ import {
   CaptureRequest,
   CaptureResponse,
   HealthResponse,
-  IgnoreLists,
   OpenRequest,
   OpenResponse,
   ResolveResponse,
@@ -24,10 +23,11 @@ import {
   loadLibrary,
   openApplicationFolder,
   readApplicationStatus,
-  readIgnoreLists,
+  parseFalsePositives,
+  readFalsePositives,
   readSavedDescription,
   setApplicationStatus,
-  writeIgnoreLists,
+  writeFalsePositives,
 } from "@jat/core";
 import { autoDraftEnabled, buildResumeTyp } from "./draft.js";
 import { suggest } from "./model.js";
@@ -142,7 +142,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
         return;
       }
       if (req.method === "GET" && req.url === "/api/ignore") {
-        json(res, 200, readIgnoreLists(root));
+        json(res, 200, readFalsePositives(root));
         return;
       }
       if (req.method === "POST" && req.url === "/api/ignore") {
@@ -153,18 +153,18 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           json(res, 400, { error: "invalid JSON body" });
           return;
         }
-        const parsed = IgnoreLists.safeParse(body);
-        if (!parsed.success) {
-          json(res, 400, { error: "invalid ignore lists", issues: parsed.error.issues });
+        const parsed = parseFalsePositives(body);
+        if (!parsed) {
+          json(res, 400, { error: "invalid false positives" });
           return;
         }
         try {
-          writeIgnoreLists(root, parsed.data);
+          writeFalsePositives(root, parsed);
         } catch (err) {
           json(res, 500, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
-        json(res, 200, readIgnoreLists(root));
+        json(res, 200, readFalsePositives(root));
         return;
       }
       if (req.method === "POST" && req.url === "/api/capture") {

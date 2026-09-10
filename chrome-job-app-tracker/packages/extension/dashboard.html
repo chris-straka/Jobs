@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>ja — ignored sites</title>
+    <title>ja — false positives</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -47,26 +47,12 @@
         font-size: 14px;
         margin: 0 0 2px;
       }
-      /* False positives left, ignored right; stacked on narrow screens. */
-      .cols {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 24px;
-        align-items: start;
-      }
-      @media (max-width: 560px) {
-        .cols {
-          grid-template-columns: 1fr;
-        }
-      }
       .sub {
         color: var(--muted);
         font-size: 13px;
         margin: 0 0 12px;
       }
-      /* Heading left, ignore form right, one row; stacked on narrow screens.
-         The min-height matches the form controls so both columns' headers
-         — and therefore both lists — start at the same height. */
+      /* Heading left, add form right, one row; stacked on narrow screens. */
       .sec-head {
         display: flex;
         align-items: center;
@@ -80,7 +66,7 @@
       }
       #add-form {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr 1fr auto;
         gap: 8px;
         margin-bottom: 0;
       }
@@ -91,6 +77,9 @@
         .sec-head {
           flex-direction: column;
           align-items: stretch;
+        }
+        #add-form {
+          grid-template-columns: 1fr;
         }
       }
       input {
@@ -189,27 +178,19 @@
     </style>
   </head>
   <body>
-    <div class="cols">
-      <section>
-        <div class="sec-head">
-          <h2>False positives (<span id="fp-count">0</span>)</h2>
-        </div>
-        <ul id="fp-list"></ul>
-        <p id="fp-empty" class="empty-note" hidden>None reported.</p>
-      </section>
-      <section>
-        <div class="sec-head">
-          <h2>Ignored (<span id="dash-count">0</span>)</h2>
-          <form id="add-form">
-            <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
-            <button class="primary" type="submit">Ignore host</button>
-          </form>
-        </div>
-        <p id="form-error" hidden></p>
-        <ul id="dash-list"></ul>
-        <p id="empty-note" class="empty-note" hidden>No ignored sites.</p>
-      </section>
-    </div>
+    <section>
+      <div class="sec-head">
+        <h2>False positives (<span id="fp-count">0</span>)</h2>
+        <form id="add-form">
+          <input id="add-url" placeholder="Paste posting URL…" autocomplete="off" spellcheck="false" />
+          <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
+          <button class="primary" type="submit">Add</button>
+        </form>
+      </div>
+      <p id="form-error" hidden></p>
+      <ul id="fp-list"></ul>
+      <p id="fp-empty" class="empty-note" hidden>No false positives yet.</p>
+    </section>
     <script src="dist/dashboard.js"></script>
   </body>
 </html>
