@@ -16,6 +16,7 @@ import { loadTrackerEnv, repoRoot, serverPort } from "./repo.js";
 
 export { runProbe } from "./probe.js";
 import {
+  DuplicateApplication,
   addApplication,
   buildResumes,
   findByUrl,
@@ -193,7 +194,13 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
             }),
           );
         } catch (err) {
-          json(res, 500, { error: String(err) });
+          // Same date/company/role as a tracked application: point at it
+          // instead of failing — the popup shows its saved state.
+          if (err instanceof DuplicateApplication) {
+            json(res, 409, { error: err.message, folder: err.folder });
+          } else {
+            json(res, 500, { error: String(err) });
+          }
         }
         return;
       }

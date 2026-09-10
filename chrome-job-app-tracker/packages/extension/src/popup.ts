@@ -390,9 +390,12 @@ function renderLinks(folder: string): void {
 
 /**
  * Tracked URL, unchanged text: the posting is already saved, so there is
- * no form — just the opener links and an enabled Mark applied.
+ * no form — just the opener links and an enabled Mark applied. The save
+ * collision path passes markEnabled=false when the form text does not
+ * match the folder, so a same-slug different posting is never one click
+ * away from being marked applied.
  */
-function showSavedState(folder: string): void {
+function showSavedState(folder: string, markEnabled = true): void {
   el("capture-form").hidden = true;
   el("empty-state").hidden = true;
   el("result-title").textContent = "Already saved ✓";
@@ -402,9 +405,11 @@ function showSavedState(folder: string): void {
   el("draft-line").hidden = true;
   el("result-actions").prepend(el("mark-applied"));
   const mark = el("mark-applied") as HTMLButtonElement;
-  mark.disabled = false;
-  mark.title = "";
+  mark.disabled = !markEnabled;
+  mark.title = markEnabled ? "" : "Saved posting differs — check the folder first";
   el("result").hidden = false;
+  // The saved state replaces the status box — never both.
+  show("");
 }
 
 /**
@@ -449,6 +454,20 @@ function showResult(
 }
 
 let saving = false;
+
+/**
+ * Mark gating for a save collision: enable Mark applied only when the
+ * conflicting folder is what the form shows — the same folder the tab URL
+ * resolves to, with matching posting text.
+ */
+async function conflictMatches(
+  tabUrl: string,
+  description: string,
+  folder: string,
+): Promise<boolean> {
+  const known = await resolvePosting(tabUrl);
+  return !!known && known.folder === folder && samePostingText(description, known.description);
+}
 
 /**
  * Validates the form client-side, POSTs to the capture server, and renders
@@ -510,6 +529,19 @@ async function save(): Promise<void> {
   }
   const body = (await res.json()) as unknown;
   if (!res.ok) {
+    // Lost the race (stale form, double save): the folder is the truth
+    // now, so show its saved state instead of the raw collision error.
+    // No form, no save button — and Mark applied only when the form text
+    // provably matches the folder's posting.
+    if (res.status === 409) {
+      const conflict = body as { folder?: unknown };
+      if (typeof conflict?.folder === "string" && conflict.folder) {
+        const markEnabled = await conflictMatches(tabUrl, description, conflict.folder);
+        saving = false;
+        showSavedState(conflict.folder, markEnabled);
+        return;
+      }
+    }
     show(`Server refused it:\n${JSON.stringify(body).slice(0, 1000)}`);
     saving = false;
     saveBtn.disabled = false;

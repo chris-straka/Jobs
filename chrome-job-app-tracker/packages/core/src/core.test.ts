@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { addApplication } from "./add.js";
+import { DuplicateApplication, addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
@@ -72,8 +72,15 @@ describe("addApplication", () => {
 
   it("rejects duplicates and bad input", async () => {
     const root = await mkRoot();
-    addApplication(root, INPUT, "2026-09-09");
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
     expect(() => addApplication(root, INPUT, "2026-09-09")).toThrow("already exists");
+    try {
+      addApplication(root, INPUT, "2026-09-09");
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(DuplicateApplication);
+      expect((err as DuplicateApplication).folder).toBe(folder);
+    }
     expect(() => addApplication(root, { ...INPUT, track: "pm" }, "2026-09-10")).toThrow(
       "track must be",
     );

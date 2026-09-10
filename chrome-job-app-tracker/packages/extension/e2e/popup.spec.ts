@@ -521,3 +521,172 @@ test("changed text at a tracked URL keeps the form with a notice", async ({ page
     await cleanup();
   }
 });
+
+test("saving over a different posting shows its saved state, mark off", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    const jobUrl = `${site.url}/e2e/fixture-job.html`;
+    // Same slug, different text: the classic recycled-URL collision.
+    const seed = await fetch(`${capture.url}/api/capture`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url: jobUrl,
+        company: "Acme",
+        role: "Backend Engineer",
+        track: "swe",
+        region: "ca",
+        description: "An older posting for the same rolling-intake URL. ".repeat(10),
+      }),
+    });
+    expect(seed.ok).toBe(true);
+
+    await page.addInitScript(
+      ({
+        jobUrl: url,
+        serverUrl,
+        serverRoot,
+        description,
+      }: {
+        jobUrl: string;
+        serverUrl: string;
+        serverRoot: string;
+        description: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            query: (): Promise<{ id: number; url: string }[]> =>
+              Promise.resolve([{ id: 7, url }]),
+            sendMessage: (): Promise<unknown> =>
+              Promise.resolve({
+                ok: true,
+                posting: { title: "Backend Engineer", description },
+              }),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
+      },
+      {
+        jobUrl,
+        serverUrl: capture.url,
+        serverRoot: dir,
+        description: JD,
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#recycled-note")).toBeVisible();
+    await page.locator("#company").fill("Acme");
+    await page.locator("#save").click();
+
+    // Collision, not an error dump: no form, no save, mark stays off —
+    // the folder is a different posting.
+    await expect(page.locator("#result-title")).toContainText("Already saved");
+    await expect(page.locator("#capture-form")).toBeHidden();
+    await expect(page.locator("#mark-applied")).toBeDisabled();
+    await expect(page.locator("#status")).toBeHidden();
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});
+
+test("saving over the same posting shows its saved state, mark on", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    const jobUrl = `${site.url}/e2e/fixture-job.html`;
+    await page.addInitScript(
+      ({
+        jobUrl: url,
+        serverUrl,
+        serverRoot,
+        description,
+      }: {
+        jobUrl: string;
+        serverUrl: string;
+        serverRoot: string;
+        description: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            query: (): Promise<{ id: number; url: string }[]> =>
+              Promise.resolve([{ id: 7, url }]),
+            sendMessage: (): Promise<unknown> =>
+              Promise.resolve({
+                ok: true,
+                posting: { title: "Backend Engineer", description },
+              }),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
+      },
+      {
+        jobUrl,
+        serverUrl: capture.url,
+        serverRoot: dir,
+        description: JD,
+      },
+    );
+
+    // Stale form: untracked at prefill, saved elsewhere before the click.
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await page.locator("#company").fill("Acme");
+    const seed = await fetch(`${capture.url}/api/capture`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url: jobUrl,
+        company: "Acme",
+        role: "Backend Engineer",
+        track: "swe",
+        region: "ca",
+        description: JD,
+      }),
+    });
+    expect(seed.ok).toBe(true);
+    await page.locator("#save").click();
+
+    // Same posting, so Mark applied is safe to offer.
+    await expect(page.locator("#result-title")).toContainText("Already saved");
+    await expect(page.locator("#capture-form")).toBeHidden();
+    await expect(page.locator("#mark-applied")).toBeEnabled();
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});

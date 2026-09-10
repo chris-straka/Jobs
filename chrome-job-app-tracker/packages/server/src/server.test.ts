@@ -211,6 +211,39 @@ describe("resolve + status", () => {
       server.close();
     }
   }, 120000);
+
+  it("returns 409 with the folder on duplicate saves", async () => {
+    const tmp = await mkFixture();
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      const payload = {
+        url: "https://example.com/jobs/100",
+        company: "Acme",
+        role: "Backend Engineer",
+        track: "swe",
+        region: "uk",
+        description: JD,
+      };
+      const post = (): Promise<Response> =>
+        fetch(`${base}/api/capture`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      const first = await (await post()).json();
+      expect(first.folder).toMatch(/^applications\//);
+      const secondRes = await post();
+      expect(secondRes.status).toBe(409);
+      const second = (await secondRes.json()) as { error?: string; folder?: string };
+      expect(second.error).toContain("already exists");
+      expect(second.folder).toBe(first.folder);
+    } finally {
+      server.close();
+    }
+  }, 120000);
 });
 
 describe("capture end to end", () => {

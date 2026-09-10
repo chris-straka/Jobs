@@ -3,6 +3,19 @@ import path from "node:path";
 import { appFolder, canonicalPostingUrl } from "@jat/shared";
 import { CSV_HEADER, formatRow, type AppRow } from "./csv.js";
 
+/**
+ * A save targeting an existing folder (same date/company/role slug).
+ * Carries the folder so callers can show it instead of a bare error.
+ */
+export class DuplicateApplication extends Error {
+  readonly folder: string;
+  constructor(folder: string) {
+    super(`already exists: ${folder}`);
+    this.name = "DuplicateApplication";
+    this.folder = folder;
+  }
+}
+
 export interface AddInput {
   url: string;
   company: string;
@@ -64,7 +77,7 @@ export function addApplication(
 
   const folder = `applications/${appFolder(date, company, role)}`;
   const dir = path.join(root, folder);
-  if (existsSync(dir)) throw new Error(`already exists: ${folder}`);
+  if (existsSync(dir)) throw new DuplicateApplication(folder);
   mkdirSync(dir, { recursive: true });
 
   writeFileSync(path.join(dir, "resume.typ"), resumeTyp(track, region));
