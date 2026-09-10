@@ -109,8 +109,15 @@ export function hostInstalled(home: string, id: string, browser: string): boolea
 function runInstallSh(tracker: string, id: string, browser: string): void {
   const installSh = path.join(tracker, "packages", "native-host", "install.sh");
   if (!existsSync(installSh)) die(`no native host checkout under ${tracker}`);
-  const r = spawnSync(installSh, ["--browser", browser, "--id", id], { stdio: "inherit" });
-  if (r.error || r.status !== 0) die("install.sh failed — see above");
+  // Quiet on success — the caller prints one summary line. Loud on failure.
+  const r = spawnSync(installSh, ["--browser", browser, "--id", id], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (r.error || r.status !== 0) {
+    process.stderr.write(`${r.stdout ?? ""}${r.stderr ?? ""}`);
+    die("install.sh failed — see above");
+  }
 }
 
 /** Browsers actually present on this machine. */
