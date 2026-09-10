@@ -21,6 +21,7 @@ import {
   buildResumes,
   findByUrl,
   isPageOverflow,
+  loadInvariants,
   loadLibrary,
   openApplicationFolder,
   readApplicationStatus,
@@ -228,6 +229,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
           const { folder } = addApplication(root, parsed.data);
           try {
             const library = loadLibrary(root);
+            const invariants = loadInvariants(root);
             setStage(clientId, "fit");
             const fit = analyzeFit(parsed.data.description, library);
             setStage(clientId, "build");
@@ -269,7 +271,7 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
               model.raw = run.raw;
             } else {
               setStage(clientId, "model");
-              model = await suggest(parsed.data.description, library);
+              model = await suggest(parsed.data.description, library, undefined, invariants);
             }
             if (
               autoDraftEnabled() &&

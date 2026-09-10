@@ -65,6 +65,10 @@ When asked to tailor an application:
   factual document about Chris's actual experience.
 - New bullets get added to `content/projects.yml` only when Chris confirms the
   underlying work is real, and they go in with a stable `id`.
+- **Never assert the opposite of `content/invariants.yml`.** Hard truths about
+  Chris live there. They bind the summary, skills, bullets, and notes equally —
+  even when the posting's language invites the opposite. Echo the posting's
+  stack, never its biography.
 - **One page, always.** It's a deliberate constraint, not an accident.
 - Bullets are referenced by id, so a typo fix in `content/` propagates to all
   future resumes. Already-compiled PDFs stay frozen — that's intended.

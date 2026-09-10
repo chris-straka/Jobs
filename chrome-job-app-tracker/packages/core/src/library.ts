@@ -15,6 +15,21 @@ const ProjectsFile = z.object({
   ),
 });
 
+const InvariantsFile = z.object({ invariants: z.array(z.string()).default([]) });
+
+/**
+ * Read the hard truths list. Missing file or bad shape means no invariants,
+ * never a crash — the tailor simply gets no negative facts.
+ */
+export function loadInvariants(root: string): string[] {
+  try {
+    const raw = readFileSync(path.join(root, "content", "invariants.yml"), "utf8");
+    return InvariantsFile.parse(yaml.load(raw)).invariants;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Read the master bullet library. Unknown keys (e.g. `track`) are ignored.
  */

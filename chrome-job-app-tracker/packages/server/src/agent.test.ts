@@ -130,6 +130,7 @@ describe("agent tailoring", () => {
     expect(prompt).toContain("applications/2026-09-09_acme_x/job.md");
     expect(prompt).toContain("telemetry, dbmodel");
     expect(prompt).toContain("never invent");
+    expect(prompt).toContain("content/invariants.yml");
     expect(prompt).toContain("Work only inside applications/2026-09-09_acme_x/.");
     expect(prompt).not.toContain("Architected an event-driven");
   });

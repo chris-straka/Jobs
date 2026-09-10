@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { DuplicateApplication, addApplication, removeApplication } from "./add.js";
 import { buildResumes, isPageOverflow } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
-import { findByUrl, readSavedDescription } from "./library.js";
+import { findByUrl, loadInvariants, readSavedDescription } from "./library.js";
 import {
   mergeFalsePositives,
   parseFalsePositives,
@@ -135,6 +135,19 @@ describe("readSavedDescription", () => {
     const { folder } = addApplication(root, INPUT, "2026-09-09");
     expect(readSavedDescription(root, folder)).toBe(INPUT.description.trim());
     expect(readSavedDescription(root, "applications/9999-99-99_nope_x")).toBeNull();
+  });
+});
+
+describe("loadInvariants", () => {
+  it("reads the hard truths list, tolerating a missing file", async () => {
+    const root = await mkRoot();
+    expect(loadInvariants(root)).toEqual([]);
+    await mkdir(path.join(root, "content"), { recursive: true });
+    await writeFile(
+      path.join(root, "content", "invariants.yml"),
+      'invariants:\n  - "No professional work experience (yet)."\n',
+    );
+    expect(loadInvariants(root)).toEqual(["No professional work experience (yet)."]);
   });
 });
 
