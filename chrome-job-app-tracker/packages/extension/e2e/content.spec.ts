@@ -17,8 +17,10 @@ test("content script extracts the posting from the real bundle", async ({ page }
   await page.addInitScript(() => {
     const listeners: MessageListener[] = [];
     const store: Record<string, unknown> = {};
+    const messages: string[] = [];
     // Stands in for background.ts: FP reports land in fpReported.
     const fakeBackground = (msg: { type?: string; host?: string }): unknown => {
+      messages.push(msg?.type ?? "");
       if (msg?.type === "JAT_FP_REPORT" && msg.host) {
         const hosts = Array.isArray(store["fpReported"]) ? store["fpReported"] : [];
         if (!(hosts as string[]).includes(msg.host)) {
@@ -55,10 +57,12 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const w = window as unknown as { chrome?: unknown } & FakeWindow & {
         __jatListeners?: MessageListener[];
         __jatStore?: Record<string, unknown>;
+        __jatMessages?: string[];
       };
     w.chrome = fakeChrome;
     w.__jatListeners = listeners;
     w.__jatStore = store;
+    w.__jatMessages = messages;
   });
 
   const site = await startStatic(pkgDir);
