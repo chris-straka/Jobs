@@ -8,7 +8,9 @@ import {
   agentModel,
   agentTimeoutMs,
   buildAgentPrompt,
+  childEnv,
   countDraftBullets,
+  defaultSpawn,
   resolveBin,
   runAgentTailor,
   stageFromEvent,
@@ -38,6 +40,45 @@ describe("agent tailoring", () => {
     tmpDirs.push(dir);
     await writeFile(path.join(dir, "jat-fake-muse"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     expect(resolveBin("jat-fake-muse", { PATH: dir })).toBe(path.join(dir, "jat-fake-muse"));
+  });
+
+  it("scrubs secrets from the child env but keeps a working PATH", () => {
+    const out = childEnv({
+      PATH: "/usr/bin",
+      HOME: "/Users/c",
+      USER: "c",
+      MODEL_API_KEY: "secret",
+      META_API_KEY: "secret",
+      GITHUB_TOKEN: "secret",
+      JAT_AGENT_MAX_STEPS: "50",
+      LANG: "en_US.UTF-8",
+    });
+    expect(out.MODEL_API_KEY).toBeUndefined();
+    expect(out.META_API_KEY).toBeUndefined();
+    expect(out.GITHUB_TOKEN).toBeUndefined();
+    expect(out.HOME).toBe("/Users/c");
+    expect(out.JAT_AGENT_MAX_STEPS).toBe("50");
+    expect(out.PATH ?? "").toContain("/usr/bin");
+    expect(out.PATH ?? "").toContain(".local/bin");
+  });
+
+  it("spawned children cannot see parent secrets", async () => {
+    process.env.PARENT_SECRET_VALUE = "parent-secret-value";
+    try {
+      const r = await defaultSpawn(
+        "/bin/sh",
+        ["-c", 'echo "PATH=$PATH KEY=$PARENT_SECRET_VALUE"'],
+        {
+          cwd: "/tmp",
+          timeoutMs: 10000,
+        },
+      );
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).not.toContain("parent-secret-value");
+      expect(r.stdout).toContain(".local/bin");
+    } finally {
+      delete process.env.PARENT_SECRET_VALUE;
+    }
   });
 
   it("briefs the repo files instead of pasting the library", () => {

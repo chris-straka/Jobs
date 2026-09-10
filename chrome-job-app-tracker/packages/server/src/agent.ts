@@ -85,6 +85,33 @@ export type SpawnFn = (
 const OUTPUT_CAP = 32768;
 const cap = (s: string): string => (s.length > OUTPUT_CAP ? s.slice(-OUTPUT_CAP) : s);
 
+const EXTRA_PATH_DIRS = [`${homedir()}/.local/bin`, "/opt/homebrew/bin", "/usr/local/bin"];
+
+/**
+ * What the agent child may see. Postings are untrusted third-party input
+ * and a prompt-injected agent must not find secrets in its environment —
+ * so only locale, home, temp, proxy, and our own JAT_ settings pass
+ * through, never keys, tokens, or other secrets. PATH is augmented (not
+ * replaced) so the stripped servers that lose ~/.local/bin still leave the
+ * agent a working toolchain (typst, ja) while HOME keeps muse auth working.
+ */
+export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (
+      v !== undefined &&
+      /^(PATH|HOME|USER|LOGNAME|SHELL|TERM|LANG|LC_|TZ|TMPDIR|XDG_|HTTP_PROXY|HTTPS_PROXY|http_proxy|https_proxy|NO_PROXY|no_proxy|JAT_)/.test(
+        k,
+      )
+    ) {
+      out[k] = v;
+    }
+  }
+  const dirs = [...(out.PATH ?? "").split(":").filter((d) => d.length > 0), ...EXTRA_PATH_DIRS];
+  out.PATH = [...new Set(dirs)].join(":");
+  return out;
+}
+
 /**
  * Mid-run stage from one `--json` event. Observed task kinds: tool.read_file,
  * tool.write_file, tool.bash, model.meta.response (reminder.* is ignored).
@@ -121,7 +148,7 @@ export function defaultSpawn(
       clearTimeout(timer);
       resolve({ exitCode: code ?? -1, timedOut, stdout, stderr });
     };
-    const child = spawn(bin, args, { cwd: opts.cwd });
+    const child = spawn(bin, args, { cwd: opts.cwd, env: childEnv() });
     child.stdout.on("data", (d: Buffer) => {
       const s = d.toString();
       stdout = cap(stdout + s);
