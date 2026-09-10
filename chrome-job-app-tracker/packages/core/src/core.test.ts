@@ -94,6 +94,14 @@ describe("findByUrl", () => {
     expect(findByUrl(root, "https://other.com/jobs/1")).toBeNull();
     expect(findByUrl(root, "")).toBeNull();
   });
+
+  it("prefers the newest folder when a URL is recycled", async () => {
+    const root = await mkRoot();
+    const old = addApplication(root, INPUT, "2026-09-09");
+    const current = addApplication(root, { ...INPUT, role: "Backend Engineer II" }, "2026-09-10");
+    expect(old.folder).not.toBe(current.folder);
+    expect(findByUrl(root, INPUT.url)).toBe(current.folder);
+  });
 });
 
 describe("setApplicationStatus", () => {

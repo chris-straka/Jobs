@@ -31,6 +31,8 @@ export function loadLibrary(root: string): LibraryProject[] {
 /**
  * Find the tracked application whose `job.md` records the given posting URL.
  * Reads front-matter, not the CSV — one source of truth for the lookup.
+ * A recycled URL (rolling intakes) matches every term's folder; folders
+ * sort newest-first, so the current application wins.
  *
  * @returns repo-relative folder, or `null` when the URL was never captured
  */
@@ -43,8 +45,8 @@ export function findByUrl(root: string, url: string): string | null {
   } catch {
     return null;
   }
+  entries = entries.filter((e) => !e.startsWith(".")).sort().reverse();
   for (const e of entries) {
-    if (e.startsWith(".")) continue;
     try {
       const job = readFileSync(path.join(root, "applications", e, "job.md"), "utf8");
       const m = /^url:\s*"([^"]*)"/m.exec(job);
