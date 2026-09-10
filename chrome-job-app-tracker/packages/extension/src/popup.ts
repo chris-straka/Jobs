@@ -253,7 +253,7 @@ async function resolvePosting(
     const res = await fetch(`${serverBase()}/api/resolve?url=${encodeURIComponent(tabUrl)}`);
     const parsed = ResolveResponse.safeParse(await res.json());
     if (parsed.success && parsed.data.folder) {
-      return { folder: parsed.data.folder, description: parsed.data.description };
+      return { folder: parsed.data.folder, description: parsed.data.description ?? null };
     }
     return null;
   } catch {
@@ -346,9 +346,13 @@ async function prefill(): Promise<void> {
     mark.title = "Save this posting first";
     const note = el("recycled-note");
     if (known) {
+      // No saved text to compare (older server, unreadable file): report
+      // the save without claiming the text changed.
       note.textContent =
-        `This URL was saved before as ${known.folder} — but the text changed, ` +
-        `so this looks like a new posting.`;
+        known.description === null
+          ? `This URL was saved before as ${known.folder}.`
+          : `This URL was saved before as ${known.folder} — but the text changed, ` +
+            `so this looks like a new posting.`;
       note.hidden = false;
     } else {
       note.hidden = true;

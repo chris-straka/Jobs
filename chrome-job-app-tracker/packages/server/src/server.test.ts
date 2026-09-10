@@ -233,13 +233,15 @@ describe("resolve + status", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         });
-      const first = await (await post()).json();
-      expect(first.folder).toMatch(/^applications\//);
+      const first = (await (await post()).json()) as { folder?: unknown };
+      expect(typeof first.folder).toBe("string");
+      const folder = first.folder as string;
+      expect(folder).toMatch(/^applications\//);
       const secondRes = await post();
       expect(secondRes.status).toBe(409);
       const second = (await secondRes.json()) as { error?: string; folder?: string };
       expect(second.error).toContain("already exists");
-      expect(second.folder).toBe(first.folder);
+      expect(second.folder).toBe(folder);
     } finally {
       server.close();
     }

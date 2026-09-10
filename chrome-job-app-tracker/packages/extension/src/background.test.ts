@@ -197,6 +197,16 @@ describe("JAT_OPEN handoff", () => {
   });
 });
 
+describe("JAT_PILL_STATE compatibility", () => {
+  it("treats older servers that omit status and description as draft", async () => {
+    routes.resolve = { ok: true, body: { folder: "applications/2026-09-09_acme_x" } };
+    expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
+      tracked: true,
+      applied: false,
+    });
+  });
+});
+
 describe("JAT_FP_REPORT", () => {
   it("records the host for untracked URLs", async () => {
     routes.resolve = { ok: true, body: resolveBody(null) };

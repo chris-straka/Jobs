@@ -98,9 +98,9 @@ export type StatusResponse = z.infer<typeof StatusResponse>;
 export const ResolveResponse = z.object({
   folder: z.string().nullable(),
   /** Saved job.md body for the folder, so the caller can tell a repost from a recycled URL. */
-  description: z.string().nullable(),
+  description: z.string().nullable().optional(),
   /** Application status for the folder; null when untracked or unreadable. */
-  status: AppStatus.nullable(),
+  status: AppStatus.nullable().optional(),
 });
 export type ResolveResponse = z.infer<typeof ResolveResponse>;
 
