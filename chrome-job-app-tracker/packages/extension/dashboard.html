@@ -64,13 +64,16 @@
         font-size: 13px;
         margin: 0 0 12px;
       }
-      /* Heading left, ignore form right, one row; stacked on narrow screens. */
+      /* Heading left, ignore form right, one row; stacked on narrow screens.
+         The min-height matches the form controls so both columns' headers
+         — and therefore both lists — start at the same height. */
       .sec-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
         margin-bottom: 12px;
+        min-height: 40px;
       }
       .sec-head h2 {
         white-space: nowrap;
@@ -188,8 +191,9 @@
   <body>
     <div class="cols">
       <section>
-        <h2>False positives (<span id="fp-count">0</span>)</h2>
-        <p class="sub">Reported from the pill's False positive button.</p>
+        <div class="sec-head">
+          <h2>False positives (<span id="fp-count">0</span>)</h2>
+        </div>
         <ul id="fp-list"></ul>
         <p id="fp-empty" class="empty-note" hidden>None reported.</p>
       </section>
