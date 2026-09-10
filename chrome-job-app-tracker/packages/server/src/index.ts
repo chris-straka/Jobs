@@ -137,8 +137,12 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
               build = buildResumes(root, [folder]);
               draft.written = true;
               draft.summary = model.summary;
-            } catch {
+            } catch (err) {
               draft.written = false;
+              console.error(
+                `auto-draft failed for ${folder}:`,
+                err instanceof Error ? err.message : err,
+              );
             }
           }
           json(

@@ -228,6 +228,31 @@
         color: var(--accent);
         font-size: 12px;
       }
+      #build-line {
+        margin: 10px 0 2px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      #build-line.fail {
+        color: var(--bad);
+      }
+      #build-output {
+        white-space: pre-wrap;
+        font-size: 11px;
+        font-family: ui-monospace, monospace;
+        background: var(--field);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 9px;
+        max-height: 120px;
+        overflow: auto;
+        margin: 4px 0 0;
+      }
+      #draft-line {
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
       button {
         width: 100%;
         box-sizing: border-box;
@@ -247,8 +272,12 @@
       button:hover {
         filter: brightness(1.06);
       }
-      button:active {
-        filter: brightness(0.95);
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      button:focus:not(:focus-visible) {
+        outline: none;
       }
       button:disabled {
         cursor: default;
@@ -384,9 +413,10 @@
     <div id="result" hidden>
       <p id="result-title">Saved ✓</p>
       <div id="result-links"></div>
-      <div class="btn-row" id="result-actions">
-        <button id="capture-another" type="button">Capture another</button>
-      </div>
+      <p id="build-line"></p>
+      <pre id="build-output" hidden></pre>
+      <p id="draft-line" hidden></p>
+      <div class="btn-row" id="result-actions"></div>
     </div>
     <div id="status"></div>
     <script src="dist/popup.js"></script>

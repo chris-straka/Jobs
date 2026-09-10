@@ -308,10 +308,17 @@ function savedAbsPath(folder: string): string | null {
 }
 
 /**
- * Swap the form for the result: links that open the saved folder plus
- * the (relocated) Mark applied button.
+ * Swap the form for the result: opener links, one build line, one draft
+ * line, and the (relocated) Mark applied button. No dumps — the details
+ * live in the repo, not the popup.
  */
-function showResult(folder: string): void {
+function showResult(
+  folder: string,
+  buildOk: boolean,
+  buildOutput: string,
+  model: { disabled: boolean; bullets: { project: string; id: string }[] },
+  draft: { written: boolean },
+): void {
   el("capture-form").hidden = true;
   el("empty-state").hidden = true;
   const links = el("result-links");
@@ -329,12 +336,29 @@ function showResult(folder: string): void {
   } else {
     links.textContent = `Saved under ${folder} (Jobs root unknown).`;
   }
+  const buildLine = el("build-line");
+  buildLine.textContent = buildOk ? "Resume built · one page" : "Build failed";
+  buildLine.classList.toggle("fail", !buildOk);
+  const output = el("build-output");
+  output.hidden = buildOk;
+  if (!buildOk) output.textContent = buildOutput.split("\n").slice(0, 8).join("\n");
+  const draftLine = el("draft-line");
+  if (model.disabled) {
+    draftLine.hidden = true;
+  } else {
+    draftLine.hidden = false;
+    draftLine.textContent = draft.written
+      ? `Tailored with ${model.bullets.length} bullets — review resume.typ before sending`
+      : "Auto-draft failed — tailor resume.typ by hand";
+  }
   el("result-actions").prepend(el("mark-applied"));
   const mark = el("mark-applied") as HTMLButtonElement;
   mark.disabled = false;
   mark.title = "";
   el("result").hidden = false;
 }
+
+let saving = false;
 
 /**
  * Validates the form client-side, POSTs to the capture server, and renders
@@ -369,6 +393,10 @@ async function save(): Promise<void> {
     );
     return;
   }
+  if (saving) return;
+  saving = true;
+  const saveBtn = el("save") as HTMLButtonElement;
+  saveBtn.disabled = true;
   show("Saving…");
   let res: Response;
   try {
@@ -376,41 +404,36 @@ async function save(): Promise<void> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(parsed.data),
+      signal: AbortSignal.timeout(180000),
     });
-  } catch {
-    show(`Cannot reach ${server} — is the capture server running?`);
+  } catch (err) {
+    show(
+      err instanceof Error && err.name === "AbortError"
+        ? "Capture timed out — the model may still be working; check the repo."
+        : `Cannot reach ${server} — is the capture server running?`,
+    );
+    saving = false;
+    saveBtn.disabled = false;
     return;
   }
   const body = (await res.json()) as unknown;
   if (!res.ok) {
     show(`Server refused it:\n${JSON.stringify(body).slice(0, 1000)}`);
+    saving = false;
+    saveBtn.disabled = false;
     return;
   }
   const out = CaptureResponse.safeParse(body);
   if (!out.success) {
     show("Server replied with something unexpected — check the server log.");
+    saving = false;
+    saveBtn.disabled = false;
     return;
   }
-  const { folder, buildOk, fit, model, draft } = out.data;
-  showResult(folder);
-  const lines = [
-    `Saved ${folder}`,
-    `Build: ${buildOk ? "ok, one page" : "FAILED — see terminal"}`,
-    `Best match: ${fit.projects.map((p) => `${p.id} (${p.score})`).join(", ") || "none"}`,
-    `Gaps: ${fit.gaps.slice(0, 8).join(", ") || "none"}`,
-  ];
-  if (draft.written) {
-    lines.push("Draft resume written — review it before sending.");
-  }
-  if (!model.disabled) {
-    if (model.summary) lines.push(`Suggested summary: ${model.summary}`);
-    if (model.bullets.length > 0)
-      lines.push(
-        `Suggested bullets: ${model.bullets.map((b) => `${b.project}:${b.id}`).join(", ")}`,
-      );
-  }
-  lines.push("", "Next: review job.md, tailor resume.typ, run ja build, update notes.md.");
-  show(lines.join("\n"));
+  const { folder, buildOk, buildOutput, model, draft } = out.data;
+  saving = false;
+  saveBtn.disabled = false;
+  showResult(folder, buildOk, buildOutput, model, draft);
 }
 
 async function markApplied(): Promise<void> {
@@ -462,7 +485,6 @@ document.addEventListener("DOMContentLoaded", () => {
     void (nativeRunning ? nativeStop() : nativeStart());
   });
   el("open-dashboard").addEventListener("click", () => void openDashboard());
-  el("capture-another").addEventListener("click", () => void prefill());
   void (async () => {
     await prefill();
     await checkHealth();

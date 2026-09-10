@@ -32,8 +32,10 @@ export function buildResumeTyp(input: DraftInput): string {
   };
   const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b));
 
+  // Trailing comma always: in Typst ("x") is a parenthesized string,
+  // only ("x",) is a one-element array.
   const projects = ordered
-    .map(([id, ids]) => `    (id: "${id}", bullets: (${ids.map((b) => `"${b}"`).join(", ")})),`)
+    .map(([id, ids]) => `    (id: "${id}", bullets: (${ids.map((b) => `"${b}"`).join(", ")},)),`)
     .join("\n");
 
   return `#import "../../templates/lib.typ": resume
@@ -49,7 +51,7 @@ ${projects}
 `;
 }
 
-/** Auto-draft is opt-in: set `JAT_AUTO_DRAFT=1` to write drafts on capture. */
+/** Auto-draft is the point of capture: opt out with `JAT_AUTO_DRAFT=0`. */
 export function autoDraftEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.JAT_AUTO_DRAFT === "1";
+  return env.JAT_AUTO_DRAFT !== "0";
 }

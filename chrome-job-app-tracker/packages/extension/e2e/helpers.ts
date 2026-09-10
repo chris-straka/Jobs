@@ -63,9 +63,28 @@ export interface CaptureServer {
 }
 
 /** Spawn the real capture server (Bun runs its TS directly) and read back its port. */
+/** Model credential names the e2e child must never inherit (stays offline). */
+const SECRET_KEYS = [
+  "MODEL_API_URL",
+  "MODEL_API_KEY",
+  "MODEL_NAME",
+  "META_BASE_URL",
+  "META_API_KEY",
+  "META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE",
+];
+
 export async function startCaptureServer(repoRoot: string): Promise<CaptureServer> {
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    PORT: "0",
+    REPO_ROOT: repoRoot,
+    JAT_AUTO_DRAFT: "0",
+  };
+  // Empty beats absent: the child loads chrome-job-app-tracker/.env with ??=,
+  // so only present-but-empty keys keep the file from re-enabling the model.
+  for (const k of SECRET_KEYS) env[k] = "";
   const child: ChildProcess = spawn("bun", [path.join(pkgDir, "..", "server", "src", "index.ts")], {
-    env: { ...process.env, PORT: "0", REPO_ROOT: repoRoot },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const url = await new Promise<string>((resolve, reject) => {

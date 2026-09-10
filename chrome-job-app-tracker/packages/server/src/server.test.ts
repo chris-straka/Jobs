@@ -10,6 +10,7 @@ import {
   setApplicationStatus,
 } from "@jat/core";
 import { repoRoot } from "./repo.js";
+import { buildResumeTyp } from "./draft.js";
 import { modelConfigFromEnv, suggest } from "./model.js";
 import { startServer } from "./index.js";
 
@@ -96,6 +97,34 @@ describe("build wiring", () => {
     expect(r.ok).toBe(true);
     expect(seen[0][0]).toBe("typst");
     expect(seen[0]).toContain(path.join(tmp, folder, "resume.typ"));
+  });
+
+  it("compiles generated drafts, including one-bullet projects", async () => {
+    const tmp = await mkFixture();
+    const { folder } = addApplication(tmp, {
+      url: "https://example.com/jobs/99",
+      company: "Acme",
+      role: "Backend Engineer",
+      track: "swe",
+      region: "uk",
+      description: JD,
+    });
+    await writeFile(
+      path.join(tmp, folder, "resume.typ"),
+      buildResumeTyp({
+        track: "swe",
+        region: "uk",
+        summary: "Backend engineer.",
+        bullets: [
+          { project: "telemetry", id: "arch" },
+          { project: "telemetry", id: "store-forward" },
+          { project: "dbmodel", id: "sql" },
+        ],
+        fitOrder: ["telemetry", "dbmodel"],
+      }),
+    );
+    const r = buildResumes(tmp, [folder]);
+    expect(r.ok).toBe(true);
   });
 });
 
@@ -239,7 +268,7 @@ describe("capture end to end", () => {
       };
       expect(body.folder).toMatch(/^applications\//);
       expect(body.buildOk).toBe(true);
-      // Auto-draft stays off unless explicitly enabled.
+      // No model credentials in tests: nothing to draft with.
       expect(body.draft).toEqual({ written: false, summary: null });
       const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
         ok: boolean;

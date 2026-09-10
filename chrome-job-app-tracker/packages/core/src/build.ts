@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { z } from "zod";
@@ -23,8 +24,20 @@ export function todoIds(root: string): string[] {
 
 export type Runner = (cmd: string, args: string[]) => { status: number | null; output: string };
 
+const TYPST_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local/bin")];
+
+/**
+ * Servers spawned outside a shell (native host, LaunchAgents) inherit a
+ * skeletal PATH without typst. These are the only other places it lives.
+ */
+function withTypstPath(): NodeJS.ProcessEnv {
+  const parts = (process.env.PATH ?? "").split(":").filter(Boolean);
+  for (const d of TYPST_PATHS) if (!parts.includes(d)) parts.push(d);
+  return { ...process.env, PATH: parts.join(":") };
+}
+
 function defaultRunner(cmd: string, args: string[]): { status: number | null; output: string } {
-  const r = spawnSync(cmd, args, { encoding: "utf8" });
+  const r = spawnSync(cmd, args, { encoding: "utf8", env: withTypstPath() });
   return { status: r.status, output: `${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim() };
 }
 
@@ -48,7 +61,7 @@ export function buildResumes(
 
   const hasTypst = ((): boolean => {
     try {
-      const r = spawnSync("typst", ["--version"], { encoding: "utf8" });
+      const r = spawnSync("typst", ["--version"], { encoding: "utf8", env: withTypstPath() });
       return r.status === 0;
     } catch {
       return false;

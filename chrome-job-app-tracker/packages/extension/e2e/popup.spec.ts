@@ -71,12 +71,10 @@ test("popup save creates an application through the real server", async ({ page,
     await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
 
-    await expect(page.locator("#status")).toContainText(/Saved applications\//, {
-      timeout: 30000,
-    });
-    await expect(page.locator("#status")).toContainText("Best match: telemetry");
-
-    // The form gives way to the result: opener links plus mark-applied.
+    // The form gives way to the result: build state, opener links, mark-applied.
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#build-line")).toContainText("one page");
+    await expect(page.locator("#draft-line")).toBeHidden();
     await expect(page.locator("#capture-form")).toBeHidden();
     await expect(page.locator("#open-saved")).toHaveAttribute(
       "href",

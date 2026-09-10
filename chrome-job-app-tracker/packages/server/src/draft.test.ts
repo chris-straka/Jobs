@@ -20,14 +20,25 @@ describe("buildResumeTyp", () => {
     const dfs = out.indexOf('(id: "dfs"');
     expect(tele).toBeGreaterThan(-1);
     expect(dfs).toBeGreaterThan(tele);
-    expect(out).toContain('bullets: ("arch", "store-forward")');
+    expect(out).toContain('bullets: ("arch", "store-forward",)');
     expect(out).toContain('track: "swe"');
+  });
+
+  it("emits one-element arrays with a trailing comma", () => {
+    const out = buildResumeTyp({
+      track: "swe",
+      region: "ca",
+      summary: "Student.",
+      bullets: [{ project: "telemetry", id: "arch" }],
+      fitOrder: ["telemetry"],
+    });
+    expect(out).toContain('bullets: ("arch",)');
   });
 });
 
 describe("autoDraftEnabled", () => {
-  it("is opt-in", () => {
-    expect(autoDraftEnabled({})).toBe(false);
+  it("is on unless opted out", () => {
+    expect(autoDraftEnabled({})).toBe(true);
     expect(autoDraftEnabled({ JAT_AUTO_DRAFT: "1" })).toBe(true);
     expect(autoDraftEnabled({ JAT_AUTO_DRAFT: "0" })).toBe(false);
   });
