@@ -77,7 +77,7 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
     ),
   ];
   const hostStatus = (): void => {
-    console.log(ensureHost(tracker, candidates));
+    console.log(`${ensureHost(tracker, candidates)}\n`);
   };
   // Rebuild dist in place; with --out, also refresh the exported copy.
   const refresh = (): void => {
@@ -88,18 +88,17 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
       writeFileSync(path.join(ext, "repo-root.txt"), `${jobsRoot}\n`);
     }
   };
-  const readyLine = out
-    ? `load-ready copy — paste this folder into Chrome:\n${out}\nchrome://extensions, Developer mode → Load unpacked`
-    : `extension built in place — paste this folder into Chrome:\n${ext}\nchrome://extensions, Developer mode → Load unpacked (or Reload, if already loaded)`;
+  const dir = out ?? ext;
+  const readyBlock = `\nExtension rebuilt — load it in Chrome:\n\n  Go to chrome://extensions → Developer mode → Load unpacked (or Reload) with this folder:\n\n  ${dir}\n`;
   if (!values.watch) {
     refresh();
-    console.log(readyLine);
+    console.log(readyBlock);
     hostStatus();
     return;
   }
   console.log(`watching ${ext}${out ? ` → ${out}` : " (in place)"} (Ctrl-C to stop)`);
   refresh();
-  console.log(readyLine);
+  console.log(readyBlock);
   hostStatus();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const reexport = (): void => {

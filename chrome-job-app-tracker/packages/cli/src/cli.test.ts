@@ -217,8 +217,8 @@ describe("ja", () => {
     const { readFile } = await import("node:fs/promises");
     const r = run("--root", trackerRoot, "extension");
     expect(r.status).toBe(0);
-    expect(r.out).toContain("built in place");
-    expect(r.out).not.toContain("Downloads");
+    expect(r.out).toContain("Extension rebuilt");
+    expect(r.out).toContain("Go to chrome://extensions");
     const ext = path.join(trackerRoot, "packages", "extension");
     for (const f of ["dist/popup.js", "dist/background.js", "dist/content.js"]) {
       expect(existsSync(path.join(ext, f))).toBe(true);
@@ -330,9 +330,9 @@ describe("ja", () => {
       expect(hostInstalled(home, "other-id", "brave")).toBe(false);
       expect(hostInstalled(home, "abc123", "chrome")).toBe(false);
 
-      expect(ensureHost("/nonexistent-tracker", [cand], home)).toContain("skipped");
+      expect(ensureHost("/nonexistent-tracker", [cand], home)).toContain("nothing to do");
       expect(ensureHost("/nonexistent-tracker", [path.join(home, "missing")], home)).toContain(
-        "no extension copy found",
+        "extension copy found",
       );
     } finally {
       await rm(home, { recursive: true, force: true });

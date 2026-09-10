@@ -170,18 +170,18 @@ export function ensureHost(tracker: string, candidates: string[], home: string =
   const detected = detectExtensionId(candidates, browserDirs(home));
   if (detected) {
     if (hostInstalled(home, detected.id, detected.browser)) {
-      return `native host ready for ${detected.id} — skipped`;
+      return `Native host is already installed for extension ID ${detected.id} — nothing to do.`;
     }
     runInstallSh(tracker, detected.id, detected.browser);
-    return `native host installed for ${detected.id} (${detected.browser})`;
+    return `Native host installed for extension ID ${detected.id} (${detected.browser}).`;
   }
   const predicted = predictId(candidates);
   if (!predicted) {
-    return "native host: no extension copy found — nothing to install for";
+    return "No extension copy found — nothing to install the host for.";
   }
   const targets = presentBrowsers(home);
   installPredicted(tracker, predicted.id, targets);
-  return `native host installed for predicted id ${predicted.id} (${targets.map((t) => t.browser).join(", ")})`;
+  return `Native host installed for generated ID ${predicted.id} (${targets.map((t) => t.browser).join(", ")}).`;
 }
 
 export async function installHostCommand(root: string, argv: string[]): Promise<void> {
@@ -220,14 +220,14 @@ export async function installHostCommand(root: string, argv: string[]): Promise<
       : presentBrowsers();
     installPredicted(tracker, predicted.id, targets);
     console.log(
-      `installed for predicted id ${predicted.id} (${predicted.path})\n` +
-        "load it in Chrome — if the toggle ever reports the host missing, re-run ja install-host",
+      `Native host installed for generated ID ${predicted.id} (${predicted.path}).\n` +
+        "Load it in Chrome — if the toggle ever reports the host missing, re-run ja install-host.",
     );
     return;
   }
   const targetBrowser = browser ?? "chrome";
   if (hostInstalled(homedir(), id, targetBrowser)) {
-    console.log(`native host ready for ${id} — skipped`);
+    console.log(`Native host is already installed for extension ID ${id} — nothing to do.`);
     return;
   }
   runInstallSh(tracker, id, targetBrowser);
