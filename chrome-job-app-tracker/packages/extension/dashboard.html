@@ -64,11 +64,31 @@
         font-size: 13px;
         margin: 0 0 12px;
       }
+      /* Heading left, ignore form right, one row; stacked on narrow screens. */
+      .sec-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .sec-head h2 {
+        white-space: nowrap;
+      }
       #add-form {
         display: grid;
         grid-template-columns: 1fr auto;
         gap: 8px;
-        margin-bottom: 16px;
+        margin-bottom: 0;
+      }
+      #add-form button {
+        white-space: nowrap;
+      }
+      @media (max-width: 560px) {
+        .sec-head {
+          flex-direction: column;
+          align-items: stretch;
+        }
       }
       input {
         font: inherit;
@@ -174,11 +194,13 @@
         <p id="fp-empty" class="empty-note" hidden>None reported.</p>
       </section>
       <section>
-        <h2>Ignored (<span id="dash-count">0</span>)</h2>
-        <form id="add-form">
-          <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
-          <button class="primary" type="submit">Ignore host</button>
-        </form>
+        <div class="sec-head">
+          <h2>Ignored (<span id="dash-count">0</span>)</h2>
+          <form id="add-form">
+            <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
+            <button class="primary" type="submit">Ignore host</button>
+          </form>
+        </div>
         <p id="form-error" hidden></p>
         <ul id="dash-list"></ul>
         <p id="empty-note" class="empty-note" hidden>No ignored sites.</p>
