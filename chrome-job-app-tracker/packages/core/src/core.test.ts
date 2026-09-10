@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
-import { findByUrl } from "./library.js";
+import { findByUrl, readSavedDescription } from "./library.js";
 import { listApplications, setApplicationStatus } from "./status.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +101,15 @@ describe("findByUrl", () => {
     const current = addApplication(root, { ...INPUT, role: "Backend Engineer II" }, "2026-09-10");
     expect(old.folder).not.toBe(current.folder);
     expect(findByUrl(root, INPUT.url)).toBe(current.folder);
+  });
+});
+
+describe("readSavedDescription", () => {
+  it("returns the job.md body without front-matter", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    expect(readSavedDescription(root, folder)).toBe(INPUT.description.trim());
+    expect(readSavedDescription(root, "applications/9999-99-99_nope_x")).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ import {
   buildResumes,
   findByUrl,
   loadLibrary,
+  readSavedDescription,
   setApplicationStatus,
 } from "@jat/core";
 import { autoDraftEnabled, buildResumeTyp } from "./draft.js";
@@ -77,7 +78,15 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
       }
       if (req.method === "GET" && req.url?.startsWith("/api/resolve")) {
         const u = new URL(req.url, "http://127.0.0.1").searchParams.get("url") ?? "";
-        json(res, 200, ResolveResponse.parse({ folder: findByUrl(root, u) }));
+        const folder = findByUrl(root, u);
+        json(
+          res,
+          200,
+          ResolveResponse.parse({
+            folder,
+            description: folder ? readSavedDescription(root, folder) : null,
+          }),
+        );
         return;
       }
       if (req.method === "POST" && req.url === "/api/status") {

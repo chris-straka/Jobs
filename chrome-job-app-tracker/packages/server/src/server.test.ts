@@ -193,7 +193,7 @@ describe("resolve + status", () => {
       const resolved = await (
         await fetch(`${base}/api/resolve?url=${encodeURIComponent("https://example.com/jobs/100")}`)
       ).json();
-      expect(resolved).toEqual({ folder });
+      expect(resolved).toEqual({ folder, description: JD.trim() });
       const changed = await fetch(`${base}/api/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },

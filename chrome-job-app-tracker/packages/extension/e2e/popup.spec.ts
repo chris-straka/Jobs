@@ -257,3 +257,162 @@ test("native toggle starts and stops the server through the host", async ({ page
     site.close();
   }
 });
+
+test("tracked posting reopens in saved state, not the form", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    await page.addInitScript(
+      ({
+        jobUrl,
+        serverUrl,
+        serverRoot,
+        description,
+      }: {
+        jobUrl: string;
+        serverUrl: string;
+        serverRoot: string;
+        description: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            query: (): Promise<{ id: number; url: string }[]> =>
+              Promise.resolve([{ id: 7, url: jobUrl }]),
+            sendMessage: (): Promise<unknown> =>
+              Promise.resolve({
+                ok: true,
+                posting: { title: "Backend Engineer", description },
+              }),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
+      },
+      {
+        jobUrl: `${site.url}/e2e/fixture-job.html`,
+        serverUrl: capture.url,
+        serverRoot: dir,
+        description: JD,
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    await page.locator("#company").fill("Acme");
+    await page.locator("#save").click();
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#build-line")).toContainText("one page");
+
+    // Same URL, same text: the form gives way to the saved state.
+    await page.reload();
+    await expect(page.locator("#result")).toBeVisible();
+    await expect(page.locator("#result-title")).toContainText("Already saved");
+    await expect(page.locator("#capture-form")).toBeHidden();
+    await expect(page.locator("#empty-state")).toBeHidden();
+    await expect(page.locator("#build-line")).toBeHidden();
+    await expect(page.locator("#draft-line")).toBeHidden();
+    await expect(page.locator("#open-saved")).toHaveAttribute(
+      "href",
+      /vscode:\/\/file.*applications\//,
+    );
+    await expect(page.locator("#mark-applied")).toBeEnabled();
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});
+
+test("changed text at a tracked URL keeps the form with a notice", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    const jobUrl = `${site.url}/e2e/fixture-job.html`;
+    // Seed an earlier application at this URL with different text.
+    const seed = await fetch(`${capture.url}/api/capture`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url: jobUrl,
+        company: "Acme",
+        role: "Backend Engineer",
+        track: "swe",
+        region: "ca",
+        description: "An older posting for the same rolling-intake URL. ".repeat(10),
+      }),
+    });
+    expect(seed.ok).toBe(true);
+
+    await page.addInitScript(
+      ({
+        jobUrl: url,
+        serverUrl,
+        serverRoot,
+        description,
+      }: {
+        jobUrl: string;
+        serverUrl: string;
+        serverRoot: string;
+        description: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            query: (): Promise<{ id: number; url: string }[]> =>
+              Promise.resolve([{ id: 7, url }]),
+            sendMessage: (): Promise<unknown> =>
+              Promise.resolve({
+                ok: true,
+                posting: { title: "Backend Engineer", description },
+              }),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
+      },
+      {
+        jobUrl,
+        serverUrl: capture.url,
+        serverRoot: dir,
+        description: JD,
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await expect(page.locator("#recycled-note")).toBeVisible();
+    await expect(page.locator("#recycled-note")).toContainText("looks like a new posting");
+    // The old folder is not this posting: marking waits for the new save.
+    await expect(page.locator("#mark-applied")).toBeDisabled();
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});

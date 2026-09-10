@@ -285,10 +285,13 @@
         opacity: 0.55;
         filter: none;
       }
-      .tracked-line {
-        margin-top: 6px;
+      .notice {
+        background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+        border-radius: 10px;
+        padding: 9px 11px;
         font-size: 12px;
-        color: var(--muted);
+        margin: 10px 0 0;
       }
       @keyframes pop-in {
         from {
@@ -380,6 +383,7 @@
       <button id="manual-entry" type="button">Enter details manually</button>
     </div>
     <div id="capture-form">
+      <div id="recycled-note" class="notice" hidden></div>
       <label class="field-label" for="company">Company</label>
       <input id="company" />
       <label class="field-label" for="role">Role title</label>
@@ -409,7 +413,6 @@
           Mark applied ✓
         </button>
       </div>
-      <div id="tracked-line" class="tracked-line" hidden></div>
     </div>
     <div id="result" hidden>
       <p id="result-title">Saved ✓</p>

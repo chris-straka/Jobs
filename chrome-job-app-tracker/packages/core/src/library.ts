@@ -57,3 +57,22 @@ export function findByUrl(root: string, url: string): string | null {
   }
   return null;
 }
+
+/**
+ * Saved job.md body (posting text after the front-matter block) for a
+ * tracked folder. `null` when the file is missing or unparsable — the
+ * caller then treats the posting as changed, which keeps the form.
+ */
+export function readSavedDescription(root: string, folder: string): string | null {
+  try {
+    const job = readFileSync(path.join(root, folder, "job.md"), "utf8");
+    const lines = job.split("\n");
+    if (lines[0] !== "---") return job.trim() || null;
+    const end = lines.indexOf("---", 1);
+    if (end === -1) return null;
+    const body = lines.slice(end + 1).join("\n").trim();
+    return body || null;
+  } catch {
+    return null;
+  }
+}

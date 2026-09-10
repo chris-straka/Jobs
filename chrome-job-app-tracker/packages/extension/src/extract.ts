@@ -144,6 +144,18 @@ export function pickTitle(h1: string, og: string, docTitle: string): string {
  * Track from the posting itself: analyst work is CSA, everything else SWE.
  * A prefill guess, not a verdict — the field stays editable in resume.typ.
  */
+/**
+ * Same posting, or a recycled URL? Compares the live extraction against the
+ * saved job.md body after whitespace normalization. Strict on purpose: a
+ * false "changed" just shows the form, while a false "same" would hide it.
+ */
+export function samePostingText(live: string, saved: string | null): boolean {
+  if (!saved) return false;
+  const norm = (s: string): string => s.replace(/\s+/g, " ").trim();
+  const a = norm(live);
+  return a !== "" && a === norm(saved);
+}
+
 export function detectTrack(title: string, description: string): "swe" | "csa" {
   return /analyst/i.test(`${title} ${description}`) ? "csa" : "swe";
 }

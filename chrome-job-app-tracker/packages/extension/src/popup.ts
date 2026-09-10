@@ -1,6 +1,6 @@
 import { CaptureRequest, CaptureResponse, ResolveResponse, StatusResponse } from "@jat/shared";
 import { guessCompany } from "@jat/shared";
-import { detectTrack, guessRegion } from "./extract.js";
+import { detectTrack, guessRegion, samePostingText } from "./extract.js";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -225,27 +225,24 @@ function capitalize(s: string): string {
 }
 
 /**
- * Mark applied stays disabled until the server confirms this URL is
- * tracked — the click-time resolve is the backstop, this is the honest UI.
+ * Resolve this tab's URL: the tracked folder plus the saved posting text,
+ * so the popup can tell a repost (same text) from a recycled URL.
+ * `null` when untracked, offline, or there is no tab URL.
  */
-async function refreshTracked(tabUrl: string): Promise<void> {
-  const btn = el("mark-applied") as HTMLButtonElement;
-  const line = el("tracked-line");
-  btn.disabled = true;
-  btn.title = "Save this posting first";
-  line.hidden = true;
-  if (!tabUrl) return;
+async function resolvePosting(
+  tabUrl: string,
+): Promise<{ folder: string; description: string | null } | null> {
+  if (!tabUrl) return null;
   try {
     const res = await fetch(`${serverBase()}/api/resolve?url=${encodeURIComponent(tabUrl)}`);
     const parsed = ResolveResponse.safeParse(await res.json());
     if (parsed.success && parsed.data.folder) {
-      btn.disabled = false;
-      btn.title = "";
-      line.textContent = `Tracked · ${parsed.data.folder}`;
-      line.hidden = false;
+      return { folder: parsed.data.folder, description: parsed.data.description };
     }
+    return null;
   } catch {
-    // Offline — stays disabled until a save proves otherwise.
+    // Offline — plain form; mark-applied waits for the save.
+    return null;
   }
 }
 
@@ -291,7 +288,26 @@ async function prefill(): Promise<void> {
   const detected = title.trim() !== "" || description.trim() !== "";
   el("capture-form").hidden = !detected;
   el("empty-state").hidden = detected;
-  await refreshTracked(tabUrl);
+  // Tracked URL + unchanged text: the posting is already saved, so the
+  // form gives way to the saved state. Changed text means the URL was
+  // recycled for a new posting — keep the form, with a notice.
+  const known = await resolvePosting(tabUrl);
+  const mark = el("mark-applied") as HTMLButtonElement;
+  if (detected && known && samePostingText(description, known.description)) {
+    showSavedState(known.folder);
+  } else {
+    mark.disabled = true;
+    mark.title = "Save this posting first";
+    const note = el("recycled-note");
+    if (known) {
+      note.textContent =
+        `This URL was saved before as ${known.folder} — but the text changed, ` +
+        `so this looks like a new posting.`;
+      note.hidden = false;
+    } else {
+      note.hidden = true;
+    }
+  }
   (el("region") as HTMLSelectElement).value =
     guessRegion(tabUrl, `${title} ${description}`) || storedRegion;
 }
@@ -305,6 +321,44 @@ function updateCount(): void {
 function savedAbsPath(folder: string): string | null {
   if (!serverRoot) return null;
   return `${serverRoot.replace(/\/+$/, "")}/${folder}`;
+}
+
+/** Opener links for a saved folder, shared by the result and saved states. */
+function renderLinks(folder: string): void {
+  const links = el("result-links");
+  links.replaceChildren();
+  const abs = savedAbsPath(folder);
+  if (abs) {
+    const vs = document.createElement("a");
+    vs.id = "open-saved";
+    vs.href = `vscode://file${abs}`;
+    vs.textContent = "Open in VS Code";
+    const fd = document.createElement("a");
+    fd.href = `file://${abs}`;
+    fd.textContent = "Reveal in Finder";
+    links.append(vs, fd);
+  } else {
+    links.textContent = `Saved under ${folder} (Jobs root unknown).`;
+  }
+}
+
+/**
+ * Tracked URL, unchanged text: the posting is already saved, so there is
+ * no form — just the opener links and an enabled Mark applied.
+ */
+function showSavedState(folder: string): void {
+  el("capture-form").hidden = true;
+  el("empty-state").hidden = true;
+  el("result-title").textContent = "Already saved ✓";
+  renderLinks(folder);
+  el("build-line").hidden = true;
+  el("build-output").hidden = true;
+  el("draft-line").hidden = true;
+  el("result-actions").prepend(el("mark-applied"));
+  const mark = el("mark-applied") as HTMLButtonElement;
+  mark.disabled = false;
+  mark.title = "";
+  el("result").hidden = false;
 }
 
 /**
@@ -321,21 +375,8 @@ function showResult(
 ): void {
   el("capture-form").hidden = true;
   el("empty-state").hidden = true;
-  const links = el("result-links");
-  links.replaceChildren();
-  const abs = savedAbsPath(folder);
-  if (abs) {
-    const vs = document.createElement("a");
-    vs.id = "open-saved";
-    vs.href = `vscode://file${abs}`;
-    vs.textContent = "Open in VS Code";
-    const fd = document.createElement("a");
-    fd.href = `file://${abs}`;
-    fd.textContent = "Reveal in Finder";
-    links.append(vs, fd);
-  } else {
-    links.textContent = `Saved under ${folder} (Jobs root unknown).`;
-  }
+  el("result-title").textContent = "Saved ✓";
+  renderLinks(folder);
   const buildLine = el("build-line");
   buildLine.textContent = buildOk ? "Resume built · one page" : "Build failed";
   buildLine.classList.toggle("fail", !buildOk);

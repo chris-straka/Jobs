@@ -9,11 +9,26 @@ import {
   pickDescription,
   pickTitle,
   postingSignals,
+  samePostingText,
 } from "./extract.js";
 
 describe("cleanText", () => {
   it("collapses whitespace", () => {
     expect(cleanText("  Senior\n\n  Engineer\t(remote) ")).toBe("Senior Engineer (remote)");
+  });
+});
+
+describe("samePostingText", () => {
+  it("matches identical text despite whitespace differences", () => {
+    expect(samePostingText("Senior\n\n  Engineer", "Senior Engineer")).toBe(true);
+  });
+  it("rejects changed text", () => {
+    expect(samePostingText("Senior Engineer", "Junior Engineer")).toBe(false);
+  });
+  it("rejects empty or missing sides", () => {
+    expect(samePostingText("", "Senior Engineer")).toBe(false);
+    expect(samePostingText("Senior Engineer", null)).toBe(false);
+    expect(samePostingText("", null)).toBe(false);
   });
 });
 
