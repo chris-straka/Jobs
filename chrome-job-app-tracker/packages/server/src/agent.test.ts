@@ -9,6 +9,7 @@ import {
   agentTimeoutMs,
   buildAgentPrompt,
   countDraftBullets,
+  resolveBin,
   runAgentTailor,
   stageFromEvent,
 } from "./agent.js";
@@ -27,6 +28,16 @@ describe("agent tailoring", () => {
     expect(agentTimeoutMs({})).toBe(540000);
     expect(agentTimeoutMs({ JAT_AGENT_TIMEOUT_MS: "nope" })).toBe(540000);
     expect(agentMaxSteps({})).toBe(50);
+  });
+
+  it("resolves the binary beyond a stripped PATH", async () => {
+    expect(resolveBin("/opt/custom/muse", {})).toBe("/opt/custom/muse");
+    expect(resolveBin("definitely-not-a-real-bin", { PATH: "" })).toBe("definitely-not-a-real-bin");
+    // A bare name found via PATH wins without falling through.
+    const dir = await mkdtemp(path.join(tmpdir(), "jat-bin-"));
+    tmpDirs.push(dir);
+    await writeFile(path.join(dir, "jat-fake-muse"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    expect(resolveBin("jat-fake-muse", { PATH: dir })).toBe(path.join(dir, "jat-fake-muse"));
   });
 
   it("briefs the repo files instead of pasting the library", () => {
@@ -68,7 +79,7 @@ describe("agent tailoring", () => {
       onStage: (s) => void stages.push(s),
       env: {},
       spawnFn: async (bin, args) => {
-        expect(bin).toBe("muse");
+        expect(bin.endsWith("/muse")).toBe(true);
         expect(args).toContain("--yolo");
         expect(args).toContain(tmp);
         await writeFile(

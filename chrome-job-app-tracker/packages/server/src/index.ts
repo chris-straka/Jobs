@@ -27,6 +27,7 @@ import {
   parseFalsePositives,
   readFalsePositives,
   readSavedDescription,
+  removeApplication,
   setApplicationStatus,
   writeFalsePositives,
 } from "@jat/core";
@@ -334,6 +335,34 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
                   err instanceof Error ? err.message : err,
                 );
               }
+            }
+            // Atomic save: when tailoring was attempted, a capture that
+            // can't produce a tailored, compiling resume leaves nothing
+            // behind — no folder, no tracker row — so the next save starts
+            // clean instead of hitting a duplicate. Untouched otherwise:
+            // without tailoring the scaffold stands and reports its build.
+            const tailoringAttempted =
+              (agentEnabled() && autoDraftEnabled()) || (autoDraftEnabled() && !model.disabled);
+            const usable = !tailoringAttempted || (draft.written && build.ok);
+            if (!usable) {
+              const reason =
+                (model.raw ?? "")
+                  .split("\n")
+                  .map((l) => l.trim())
+                  .find((l) => l.length > 0) ?? "no output";
+              try {
+                removeApplication(root, folder);
+              } catch (err) {
+                console.error(
+                  `rollback failed for ${folder}:`,
+                  err instanceof Error ? err.message : err,
+                );
+              }
+              takeStage(clientId);
+              json(res, 500, {
+                error: `tailoring failed — ${reason.slice(0, 200)}; nothing saved`,
+              });
+              return;
             }
             draft.elapsedMs = Date.now() - started;
             takeStage(clientId);

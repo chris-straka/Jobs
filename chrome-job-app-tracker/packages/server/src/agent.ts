@@ -1,6 +1,28 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
+
+/**
+ * The server is often launched from a stripped environment (extension
+ * button, launchd) whose PATH lacks ~/.local/bin. Search a few well-known
+ * install dirs before giving up and letting spawn report its error.
+ */
+export function resolveBin(bin: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (bin.includes("/")) return bin;
+  const dirs = [...(env.PATH ?? "").split(":"), `${homedir()}/.local/bin`];
+  for (const d of ["/opt/homebrew/bin", "/usr/local/bin", ...dirs]) {
+    if (!d) continue;
+    const p = path.join(d, bin);
+    try {
+      accessSync(p, constants.X_OK);
+      return p;
+    } catch {
+      // Not here — keep looking.
+    }
+  }
+  return bin;
+}
 
 /** Agent tailoring per save: opt out with `JAT_AGENT=0` (single model call). */
 export function agentEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -172,7 +194,7 @@ export async function runAgentTailor(opts: {
     fitOrder: opts.fitOrder,
   });
   opts.onStage("agent");
-  const bin = env.JAT_AGENT_BIN ?? "muse";
+  const bin = resolveBin(env.JAT_AGENT_BIN ?? "muse", env);
   const args = [
     "exec",
     "--yolo",

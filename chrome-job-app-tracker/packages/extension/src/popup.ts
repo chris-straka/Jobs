@@ -644,7 +644,12 @@ async function save(): Promise<void> {
         return;
       }
     }
-    show(`Server refused it:\n${JSON.stringify(body).slice(0, 1000)}`);
+    const refused = body as { error?: unknown };
+    show(
+      typeof refused?.error === "string"
+        ? refused.error
+        : `Server refused it:\n${JSON.stringify(body).slice(0, 1000)}`,
+    );
     saving = false;
     saveBtn.disabled = false;
     return;

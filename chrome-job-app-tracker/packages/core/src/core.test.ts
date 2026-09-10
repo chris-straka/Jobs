@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DuplicateApplication, addApplication } from "./add.js";
+import { DuplicateApplication, addApplication, removeApplication } from "./add.js";
 import { buildResumes, isPageOverflow } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, readSavedDescription } from "./library.js";
@@ -93,6 +93,17 @@ describe("addApplication", () => {
     expect(() => addApplication(root, { ...INPUT, description: "  " }, "2026-09-10")).toThrow(
       "empty",
     );
+  });
+
+  it("removes the folder and its tracker row, keeping the rest", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(root, INPUT, "2026-09-09");
+    const other = addApplication(root, { ...INPUT, role: "Frontend Engineer" }, "2026-09-10");
+    removeApplication(root, folder);
+    await expect(readFile(path.join(root, folder, "job.md"), "utf8")).rejects.toThrow();
+    const csv = await readFile(path.join(root, "applications.csv"), "utf8");
+    expect(csv).not.toContain(folder);
+    expect(csv).toContain(other.folder);
   });
 });
 

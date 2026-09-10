@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -486,6 +486,117 @@ describe("capture end to end", () => {
       globalThis.fetch = prevFetch;
       delete process.env.MODEL_API_URL;
       delete process.env.MODEL_API_KEY;
+    }
+  }, 120000);
+
+  it("rolls back the scaffold when the agent binary fails", async () => {
+    const tmp = await mkFixture();
+    const failBin = path.join(tmp, "fake-muse-fail");
+    await writeFile(failBin, "#!/bin/sh\necho 'agent timed out' >&2\nexit 1\n", { mode: 0o755 });
+    delete process.env.JAT_AGENT;
+    process.env.JAT_AGENT_BIN = failBin;
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      const payload = {
+        url: "https://example.com/jobs/45",
+        company: "Acme",
+        role: "Backend Engineer",
+        track: "swe",
+        region: "uk",
+        description: JD,
+        clientId: "rollback-1",
+      };
+      const post = (): Promise<Response> =>
+        fetch(`${base}/api/capture`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      const res = await post();
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toContain("tailoring failed");
+      expect(body.error).toContain("agent timed out");
+      expect(body.error).toContain("nothing saved");
+      // Folder and tracker row are gone…
+      expect(await readdir(path.join(tmp, "applications"))).toEqual([]);
+      const csv = await readFile(path.join(tmp, "applications.csv"), "utf8");
+      expect(csv.trim()).toBe("date,company,role,track,region,status,url,folder");
+      // …so retrying starts clean instead of hitting a duplicate.
+      expect((await post()).status).toBe(500);
+    } finally {
+      server.close();
+      delete process.env.JAT_AGENT_BIN;
+      process.env.JAT_AGENT = "0";
+    }
+  }, 120000);
+
+  it("keeps the save when the agent binary succeeds", async () => {
+    const tmp = await mkFixture();
+    const okBin = path.join(tmp, "fake-muse-ok");
+    await writeFile(
+      okBin,
+      [
+        "#!/bin/sh",
+        'FOLDER=$(ls -d "$JAT_FAKE_ROOT"/applications/*/ | head -1)',
+        "cat > \"${FOLDER}resume.typ\" <<'TYP'",
+        '#import "../../templates/lib.typ": resume',
+        "",
+        "#resume(",
+        '  track: "swe",',
+        '  region: "uk",',
+        '  summary: "Backend engineer.",',
+        "  projects: (",
+        '    (id: "telemetry", bullets: ("arch",)),',
+        "  ),",
+        ")",
+        "TYP",
+        "printf '# X\\n\\n## Interview prep\\n\\nPrep.\\n' >> \"${FOLDER}notes.md\"",
+        "echo done",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    delete process.env.JAT_AGENT;
+    process.env.JAT_AGENT_BIN = okBin;
+    process.env.JAT_FAKE_ROOT = tmp;
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      const res = await fetch(`${base}/api/capture`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: "https://example.com/jobs/46",
+          company: "Acme",
+          role: "Backend Engineer",
+          track: "swe",
+          region: "uk",
+          description: JD,
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        folder: string;
+        buildOk: boolean;
+        draft: { written: boolean; bullets: number };
+        notes: { written: boolean };
+      };
+      expect(body.buildOk).toBe(true);
+      expect(body.draft).toMatchObject({ written: true, bullets: 1 });
+      expect(body.notes).toEqual({ written: true });
+      const typ = await readFile(path.join(tmp, body.folder, "resume.typ"), "utf8");
+      expect(typ).toContain('"arch"');
+    } finally {
+      server.close();
+      delete process.env.JAT_AGENT_BIN;
+      delete process.env.JAT_FAKE_ROOT;
+      process.env.JAT_AGENT = "0";
     }
   }, 120000);
 });

@@ -1,7 +1,15 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { appFolder, canonicalPostingUrl } from "@jat/shared";
-import { CSV_HEADER, formatRow, type AppRow } from "./csv.js";
+import { CSV_HEADER, formatRow, parseCsv, type AppRow } from "./csv.js";
 
 /**
  * A save targeting an existing folder (same date/company/role slug).
@@ -92,6 +100,30 @@ export function addApplication(
   const row: AppRow = { date, company, role, track, region, status: "draft", url, folder };
   appendFileSync(csvPath, `${formatRow(row)}\n`);
   return { folder };
+}
+
+/**
+ * Undo a scaffold: removes the folder and its tracker row. A capture that
+ * fails tailoring calls this so a half-saved application never lingers —
+ * the next save for the same posting starts clean instead of hitting a
+ * duplicate.
+ */
+export function removeApplication(root: string, folder: string): void {
+  rmSync(path.join(root, folder), { recursive: true, force: true });
+  const csvPath = path.join(root, "applications.csv");
+  let text: string;
+  try {
+    text = readFileSync(csvPath, "utf8");
+  } catch {
+    return;
+  }
+  const { header, rows } = parseCsv(text);
+  const kept = rows.filter((r) => r.folder !== folder);
+  if (kept.length === rows.length) return;
+  writeFileSync(
+    csvPath,
+    `${header}\n${kept.map(formatRow).join("\n")}${kept.length > 0 ? "\n" : ""}`,
+  );
 }
 
 /** Folders containing a resume, sorted — the default build set. */
