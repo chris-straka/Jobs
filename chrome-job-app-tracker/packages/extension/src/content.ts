@@ -20,7 +20,7 @@ const SELECTORS = [
 
 const PILL_ID = "jat-pill";
 
-const SCRUB_SELECTORS = [
+const STATIC_SCRUB = [
   "script",
   "style",
   "noscript",
@@ -28,11 +28,12 @@ const SCRUB_SELECTORS = [
   "svg",
   "canvas",
   "iframe",
-  // Page chrome, never posting prose: nav, headers, footers, search
-  // landmarks, and controls (buttons, dropdowns, submit inputs).
+  // Page chrome, never posting prose: landmarks, asides, and controls
+  // (buttons, dropdowns, submit inputs).
   "header",
   "footer",
   "nav",
+  "aside",
   "button",
   "select",
   '[role="banner"]',
@@ -49,16 +50,52 @@ const SCRUB_SELECTORS = [
   '[aria-label*="cookie" i]',
 ];
 
-/** Text of el with scripts, styles, and consent banners removed. */
-function scrubbedText(el: Element): string {
-  const clone = el.cloneNode(true) as Element;
-  clone.querySelectorAll(SCRUB_SELECTORS.join(",")).forEach((n) => n.remove());
-  return clone.textContent ?? "";
+/** Single class/id part that marks a container as site chrome. */
+const CHROME_PART =
+  /^(nav|menu|sidebar|aside|footer|header|banner|breadcrumb|pagination|pager|toolbar|modal|dialog|overlay|popup|lightbox|login|signin|signup|register|subscribe|newsletter|alert|alerts|filter|filters|search|social|share|related|similar|recommended|sponsored|ad|ads)$/;
+
+/** Posting containers win over chrome-looking parts (job-search, job-alerts aside). */
+const POSTING_HINT = /descrip|posting|content|detail|main|article/i;
+
+/**
+ * A div-soup container looks like chrome when any class/id part says so
+ * (site-header, top-nav, job-alerts) unless the name marks posting content.
+ */
+function isChromeContainer(el: Element): boolean {
+  const names = [
+    el.id,
+    ...(typeof el.className === "string" ? el.className.split(/\s+/) : []),
+  ].filter((n) => n.length > 0);
+  return names.some((name) => {
+    if (POSTING_HINT.test(name)) return false;
+    return name
+      .split(/[-_]|(?=[A-Z])/)
+      .some((part) => CHROME_PART.test(part.toLowerCase()));
+  });
 }
 
-function largestDiv(): PageCandidate | null {
+/**
+ * Detached, scrubbed copy of the page; candidates read from this, so no
+ * site-specific strings are needed anywhere — landmarks, chrome-named
+ * containers, and controls are gone structurally.
+ */
+function scrubbedRoot(): Element {
+  const clone = document.documentElement.cloneNode(true) as Element;
+  clone.querySelectorAll(STATIC_SCRUB.join(",")).forEach((n) => n.remove());
+  for (const el of clone.querySelectorAll("div, section, header, footer, ul, form")) {
+    if (isChromeContainer(el)) el.remove();
+  }
+  return clone;
+}
+
+/** Candidate text; the root comes pre-scrubbed. */
+function scrubbedText(el: Element): string {
+  return el.textContent ?? "";
+}
+
+function largestDiv(root: Element): PageCandidate | null {
   let best: { el: Element; len: number } | null = null;
-  for (const el of document.querySelectorAll("div")) {
+  for (const el of root.querySelectorAll("div")) {
     const len = (el.textContent ?? "").length;
     if (len > 500 && (!best || len > best.len)) best = { el, len };
   }
@@ -78,13 +115,14 @@ export interface Posting {
  * @returns title, URL, and description of the current tab
  */
 export function readPosting(): Posting {
+  const root = scrubbedRoot();
   const candidates: PageCandidate[] = SELECTORS.flatMap((sel) =>
-    [...document.querySelectorAll(sel)].map((el) => ({
+    [...root.querySelectorAll(sel)].map((el) => ({
       source: sel,
       text: scrubbedText(el),
     })),
   );
-  const div = largestDiv();
+  const div = largestDiv(root);
   if (div) candidates.push(div);
   const og = document.querySelector("meta[property='og:title']")?.getAttribute("content") ?? "";
   const h1 =

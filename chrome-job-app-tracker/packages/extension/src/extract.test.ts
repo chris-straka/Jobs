@@ -70,6 +70,19 @@ describe("isJunkLine", () => {
     }
   });
 
+  it("drops control and nav-link lines, keeps lookalike prose", () => {
+    for (const junk of ["Share", "Share this job", "Save job", "Print", "Home", "Back to search results"]) {
+      expect(isJunkLine(junk)).toBe(true);
+    }
+    // Nav blobs die on two signals; single-signal prose survives.
+    expect(
+      isJunkLine("Language English (United States) Français (Canada) View Profile Employee Login"),
+    ).toBe(true);
+    expect(isJunkLine("Users sign in with SSO to reach the dashboard.")).toBe(false);
+    expect(isJunkLine("Log in to the applicant portal to check your status.")).toBe(false);
+    expect(isJunkLine("Work from home two days a week.")).toBe(false);
+  });
+
   it("drops cookie-banner lines but keeps real content", () => {
     expect(
       isJunkLine(
