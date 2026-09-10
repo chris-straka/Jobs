@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { z } from "zod";
+import { canonicalPostingUrl } from "@jat/shared";
 import type { LibraryProject } from "@jat/shared";
 
 const ProjectsFile = z.object({
@@ -34,6 +35,8 @@ export function loadLibrary(root: string): LibraryProject[] {
  * @returns repo-relative folder, or `null` when the URL was never captured
  */
 export function findByUrl(root: string, url: string): string | null {
+  const want = canonicalPostingUrl(url.trim());
+  if (!want) return null;
   let entries: string[];
   try {
     entries = readdirSync(path.join(root, "applications"));
@@ -45,7 +48,7 @@ export function findByUrl(root: string, url: string): string | null {
     try {
       const job = readFileSync(path.join(root, "applications", e, "job.md"), "utf8");
       const m = /^url:\s*"([^"]*)"/m.exec(job);
-      if (m && m[1] === url) return `applications/${e}`;
+      if (m && canonicalPostingUrl(m[1]) === want) return `applications/${e}`;
     } catch {
       continue;
     }

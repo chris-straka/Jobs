@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { appFolder, guessCompany } from "./urls.js";
+import { appFolder, canonicalPostingUrl, guessCompany } from "./urls.js";
 
 describe("guessCompany", () => {
   it("reads the company from ATS paths", () => {
@@ -29,6 +29,25 @@ describe("guessCompany", () => {
     expect(guessCompany("https://www.linkedin.com/jobs/view/123")).toBe("");
     expect(guessCompany("https://www.indeed.com/viewjob?jk=abc")).toBe("");
     expect(guessCompany("not a url")).toBe("");
+  });
+});
+
+describe("canonicalPostingUrl", () => {
+  it("strips tracking params, fragments, www, and trailing slashes", () => {
+    expect(
+      canonicalPostingUrl("https://www.acme.com/jobs/123/?utm_source=linkedin&fbclid=abc#apply"),
+    ).toBe("https://acme.com/jobs/123");
+  });
+
+  it("sorts surviving params and unifies scheme and host case", () => {
+    expect(canonicalPostingUrl("http://ACME.com/jobs?b=2&a=1")).toBe(
+      "https://acme.com/jobs?a=1&b=2",
+    );
+  });
+
+  it("passes garbage through untouched", () => {
+    expect(canonicalPostingUrl("not a url")).toBe("not a url");
+    expect(canonicalPostingUrl("")).toBe("");
   });
 });
 

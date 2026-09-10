@@ -57,6 +57,38 @@ const SUFFIX = new Set([
 
 export { slug };
 
+/** Query params that identify the visit, never the posting. */
+const TRACKING_PARAM =
+  /^(utm_.*|fbclid|gclid|gclsrc|msclkid|mc_.*|igshid|_ga|_gl|vero_.*|mkt_.*|trk|trkInfo|li_fat_id|yclid|wbraid|gbraid|srsltid)$/i;
+
+/**
+ * Posting identity: scheme/host case, `www.`, fragments, tracking params,
+ * and trailing slashes all collapse, remaining params sort. Both sides of
+ * a lookup canonicalize, so `?utm_source=x` and `#apply` never fork one
+ * posting into two. Unparseable input passes through untouched.
+ */
+export function canonicalPostingUrl(raw: string): string {
+  const t = raw.trim();
+  let url: URL;
+  try {
+    url = new URL(t);
+  } catch {
+    return t;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return t;
+  url.protocol = "https:";
+  url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  url.hash = "";
+  const kept = [...url.searchParams.entries()].filter(([k]) => !TRACKING_PARAM.test(k));
+  kept.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  url.search = "";
+  for (const [k, v] of kept) url.searchParams.append(k, v);
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+    url.pathname = url.pathname.slice(0, -1);
+  }
+  return url.toString();
+}
+
 /**
  * Guess the company from a posting URL. A hint for prompts, never a default
  * the user can't see — every caller shows it editable (or as a guess label)

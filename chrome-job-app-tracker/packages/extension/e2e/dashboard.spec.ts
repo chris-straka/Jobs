@@ -3,7 +3,10 @@ import { pkgDir, startStatic } from "./helpers.js";
 
 test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
   await page.addInitScript(() => {
-    const store: Record<string, unknown> = { fpHosts: ["example.com", "jobs.example.org"] };
+    const store: Record<string, unknown> = {
+      fpReported: ["reported.example.com"],
+      fpHosts: ["example.com", "jobs.example.org"],
+    };
     const listeners: ((changes: unknown, area: string) => void)[] = [];
     const fakeChrome = {
       storage: {
@@ -12,7 +15,7 @@ test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
             Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
           set: (obj: Record<string, unknown>): Promise<void> => {
             Object.assign(store, obj);
-            for (const l of listeners) l({ fpHosts: {} }, "local");
+            for (const l of listeners) l(obj, "local");
             return Promise.resolve();
           },
         },
@@ -31,8 +34,15 @@ test("dashboard lists, adds, and removes ignored hosts", async ({ page }) => {
   const site = await startStatic(pkgDir);
   try {
     await page.goto(`${site.url}/dashboard.html`);
+    await expect(page.locator("#fp-list li")).toHaveCount(1);
+    await expect(page.locator("#fp-count")).toHaveText("1");
     await expect(page.locator("#dash-list li")).toHaveCount(2);
     await expect(page.locator("#dash-count")).toHaveText("2");
+
+    // Removing a false positive updates its own key.
+    await page.locator("#fp-list li", { hasText: "reported.example.com" }).locator("button").click();
+    await expect(page.locator("#fp-list li")).toHaveCount(0);
+    await expect(page.locator("#fp-empty")).toBeVisible();
 
     // Remove drops the row and the stored host.
     await page.locator("#dash-list li", { hasText: "example.com" }).locator("button").click();

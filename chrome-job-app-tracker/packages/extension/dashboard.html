@@ -47,10 +47,14 @@
         font-size: 18px;
         margin: 0 0 2px;
       }
+      h2 {
+        font-size: 14px;
+        margin: 24px 0 2px;
+      }
       .sub {
         color: var(--muted);
         font-size: 13px;
-        margin: 0 0 20px;
+        margin: 0 0 12px;
       }
       #add-form {
         display: grid;
@@ -129,7 +133,7 @@
         font-size: 12px;
         color: var(--bad);
       }
-      #empty-note {
+      .empty-note {
         background: var(--panel);
         border: 1px dashed var(--btn-border);
         border-radius: 10px;
@@ -154,17 +158,20 @@
     </style>
   </head>
   <body>
-    <h1>Ignored sites (<span id="dash-count">0</span>)</h1>
-    <p class="sub">
-      Hosts flagged as false positives — the capture pill never appears on them.
-    </p>
+    <h1>Managed sites</h1>
+    <p class="sub">Hosts the capture pill skips.</p>
+    <h2>False positives (<span id="fp-count">0</span>)</h2>
+    <p class="sub">Reported from the pill's False positive button.</p>
+    <ul id="fp-list"></ul>
+    <p id="fp-empty" class="empty-note" hidden>None reported.</p>
+    <h2>Ignored by hand (<span id="dash-count">0</span>)</h2>
     <form id="add-form">
       <input id="add-host" placeholder="example.com" autocomplete="off" spellcheck="false" />
       <button class="primary" type="submit">Ignore host</button>
     </form>
     <p id="form-error" hidden></p>
     <ul id="dash-list"></ul>
-    <p id="empty-note" hidden>No ignored sites. Flag one from the capture pill's False positive button.</p>
+    <p id="empty-note" class="empty-note" hidden>No ignored sites.</p>
     <script src="dist/dashboard.js"></script>
   </body>
 </html>

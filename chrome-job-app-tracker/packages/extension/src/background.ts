@@ -34,11 +34,15 @@ async function markApplied(url: string): Promise<MarkResult> {
   return { ok: true, folder: changed.data.folder };
 }
 
+/**
+ * Pill reports land in fpReported, hand adds in fpHosts. The pill stays
+ * hidden on both; the dashboard shows them as separate sections.
+ */
 async function reportFalsePositive(host: string): Promise<void> {
-  const stored = await chrome.storage.local.get(["fpHosts"]);
-  const hosts = Array.isArray(stored.fpHosts) ? stored.fpHosts : [];
+  const stored = await chrome.storage.local.get(["fpReported"]);
+  const hosts = Array.isArray(stored.fpReported) ? stored.fpReported : [];
   if (!hosts.includes(host)) {
-    await chrome.storage.local.set({ fpHosts: [...hosts, host] });
+    await chrome.storage.local.set({ fpReported: [...hosts, host] });
   }
 }
 

@@ -66,6 +66,8 @@ test("popup save creates an application through the real server", async ({ page,
     await expect(page.locator("#server")).toHaveCount(0);
     await expect(page.locator("#track")).toBeVisible();
     await expect(page.locator("#track")).toHaveValue("swe");
+    // Untracked URL: mark-applied waits for the save.
+    await expect(page.locator("#mark-applied")).toBeDisabled();
     await expect(page.locator("#copy-row")).toBeVisible();
     await page.locator("#save").click();
 

@@ -221,8 +221,10 @@ function appliedPill(): void {
 
 async function denied(): Promise<boolean> {
   try {
-    const stored = await chrome.storage.local.get(["fpHosts"]);
-    const hosts = Array.isArray(stored.fpHosts) ? stored.fpHosts : [];
+    const stored = await chrome.storage.local.get(["fpHosts", "fpReported"]);
+    const hosts = ["fpHosts", "fpReported"].flatMap((k) =>
+      Array.isArray(stored[k]) ? stored[k] : [],
+    );
     return isDenied(
       location.hostname,
       hosts.filter((h): h is string => typeof h === "string"),

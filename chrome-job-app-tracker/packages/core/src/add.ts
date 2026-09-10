@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { appFolder } from "@jat/shared";
+import { appFolder, canonicalPostingUrl } from "@jat/shared";
 import { CSV_HEADER, formatRow, type AppRow } from "./csv.js";
 
 export interface AddInput {
@@ -46,7 +46,7 @@ export function addApplication(
   input: AddInput,
   date = localDate(),
 ): { folder: string } {
-  const url = input.url.trim();
+  const url = canonicalPostingUrl(input.url.trim());
   const company = input.company.trim();
   const role = input.role.trim();
   const track = input.track.trim();

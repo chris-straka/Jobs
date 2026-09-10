@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { addApplication } from "./add.js";
 import { buildResumes } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
+import { findByUrl } from "./library.js";
 import { listApplications, setApplicationStatus } from "./status.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,20 @@ describe("addApplication", () => {
     expect(() => addApplication(root, { ...INPUT, description: "  " }, "2026-09-10")).toThrow(
       "empty",
     );
+  });
+});
+
+describe("findByUrl", () => {
+  it("matches across tracking params, case, www, and fragments", async () => {
+    const root = await mkRoot();
+    const { folder } = addApplication(
+      root,
+      { ...INPUT, url: "https://Example.com/jobs/1?utm_source=x" },
+      "2026-09-09",
+    );
+    expect(findByUrl(root, "https://www.example.com/jobs/1/?fbclid=y#apply")).toBe(folder);
+    expect(findByUrl(root, "https://other.com/jobs/1")).toBeNull();
+    expect(findByUrl(root, "")).toBeNull();
   });
 });
 

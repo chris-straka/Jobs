@@ -224,8 +224,35 @@ function capitalize(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
+/**
+ * Mark applied stays disabled until the server confirms this URL is
+ * tracked — the click-time resolve is the backstop, this is the honest UI.
+ */
+async function refreshTracked(tabUrl: string): Promise<void> {
+  const btn = el("mark-applied") as HTMLButtonElement;
+  const line = el("tracked-line");
+  btn.disabled = true;
+  btn.title = "Save this posting first";
+  line.hidden = true;
+  if (!tabUrl) return;
+  try {
+    const res = await fetch(`${serverBase()}/api/resolve?url=${encodeURIComponent(tabUrl)}`);
+    const parsed = ResolveResponse.safeParse(await res.json());
+    if (parsed.success && parsed.data.folder) {
+      btn.disabled = false;
+      btn.title = "";
+      line.textContent = `Tracked · ${parsed.data.folder}`;
+      line.hidden = false;
+    }
+  } catch {
+    // Offline — stays disabled until a save proves otherwise.
+  }
+}
+
 /** Restores stored prefs and, when the tab allows it, prefills the posting. */
 async function prefill(): Promise<void> {
+  el("save-row").appendChild(el("mark-applied"));
+  el("result").hidden = true;
   const stored = await chrome.storage.local.get(["server", "region", "serverRoot"]);
   serverBaseUrl =
     typeof stored.server === "string" ? stored.server.replace(/\/$/, "") : DEFAULT_SERVER;
@@ -264,6 +291,7 @@ async function prefill(): Promise<void> {
   const detected = title.trim() !== "" || description.trim() !== "";
   el("capture-form").hidden = !detected;
   el("empty-state").hidden = detected;
+  await refreshTracked(tabUrl);
   (el("region") as HTMLSelectElement).value =
     guessRegion(tabUrl, `${title} ${description}`) || storedRegion;
 }
@@ -302,6 +330,9 @@ function showResult(folder: string): void {
     links.textContent = `Saved under ${folder} (Jobs root unknown).`;
   }
   el("result-actions").prepend(el("mark-applied"));
+  const mark = el("mark-applied") as HTMLButtonElement;
+  mark.disabled = false;
+  mark.title = "";
   el("result").hidden = false;
 }
 
@@ -431,11 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
     void (nativeRunning ? nativeStop() : nativeStart());
   });
   el("open-dashboard").addEventListener("click", () => void openDashboard());
-  el("capture-another").addEventListener("click", () => {
-    el("save-row").appendChild(el("mark-applied"));
-    el("result").hidden = true;
-    el("capture-form").hidden = false;
-  });
+  el("capture-another").addEventListener("click", () => void prefill());
   void (async () => {
     await prefill();
     await checkHealth();

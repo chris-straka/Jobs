@@ -250,6 +250,24 @@
       button:active {
         filter: brightness(0.95);
       }
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
+        filter: none;
+      }
+      .tracked-line {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      @keyframes pop-in {
+        from {
+          opacity: 0;
+        }
+      }
+      body {
+        animation: pop-in 0.12s ease-out;
+      }
       button.primary {
         background: var(--accent);
         border-color: transparent;
@@ -321,9 +339,9 @@
         <span id="health-dot"></span>
         <span class="swap"><span id="health-text">Checking server…</span><span id="health-action"></span></span>
       </button>
-      <button id="open-dashboard" type="button">Managed</button>
+      <button id="open-dashboard" type="button">Manage</button>
     </div>
-    <div id="copy-row"><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
+    <div id="copy-row" hidden><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
     <div id="host-hint" class="hint" hidden></div>
     <div id="toast" hidden></div>
     <div id="empty-state" hidden>
@@ -357,8 +375,11 @@
       <textarea id="description"></textarea>
       <div class="btn-row" id="save-row">
         <button id="save" class="primary" type="button">Save to Jobs repo</button>
-        <button id="mark-applied" type="button">Mark applied ✓</button>
+        <button id="mark-applied" type="button" disabled title="Save this posting first">
+          Mark applied ✓
+        </button>
       </div>
+      <div id="tracked-line" class="tracked-line" hidden></div>
     </div>
     <div id="result" hidden>
       <p id="result-title">Saved ✓</p>

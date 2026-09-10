@@ -17,12 +17,12 @@ test("content script extracts the posting from the real bundle", async ({ page }
   await page.addInitScript(() => {
     const listeners: MessageListener[] = [];
     const store: Record<string, unknown> = {};
-    // Stands in for background.ts: records FP reports like the real hub does.
+    // Stands in for background.ts: FP reports land in fpReported.
     const fakeBackground = (msg: { type?: string; host?: string }): unknown => {
       if (msg?.type === "JAT_FP_REPORT" && msg.host) {
-        const hosts = Array.isArray(store["fpHosts"]) ? store["fpHosts"] : [];
+        const hosts = Array.isArray(store["fpReported"]) ? store["fpReported"] : [];
         if (!(hosts as string[]).includes(msg.host)) {
-          store["fpHosts"] = [...(hosts as string[]), msg.host];
+          store["fpReported"] = [...(hosts as string[]), msg.host];
         }
       }
       return { ok: true };
@@ -93,7 +93,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const store = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(store["fpHosts"]).toContain("127.0.0.1");
+    expect(store["fpReported"]).toContain("127.0.0.1");
   } finally {
     site.close();
   }
