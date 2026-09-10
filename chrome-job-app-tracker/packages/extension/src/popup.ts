@@ -352,10 +352,13 @@ function showResult(
       : "Auto-draft failed — tailor resume.typ by hand";
   }
   el("result-actions").prepend(el("mark-applied"));
+  // Failed saves stay unmarked: nothing is ready to send.
   const mark = el("mark-applied") as HTMLButtonElement;
-  mark.disabled = false;
-  mark.title = "";
+  mark.disabled = !buildOk;
+  mark.title = buildOk ? "" : "Fix the failed build first";
   el("result").hidden = false;
+  // The result panel replaces the status box — never both.
+  show("");
 }
 
 let saving = false;

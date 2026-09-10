@@ -1,7 +1,75 @@
 import { expect, test } from "@playwright/test";
-import { readFile, readdir } from "node:fs/promises";
+import { appendFile, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { JD, mkFixtureRepo, pkgDir, startCaptureServer, startStatic } from "./helpers.js";
+
+test("failed builds keep mark-applied off and leave one message box", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  // Break the template import so the scaffold cannot compile.
+  await appendFile(path.join(dir, "templates", "lib.typ"), "\n#let broken = (((\n");
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    await page.addInitScript(
+      ({
+        jobUrl,
+        serverUrl,
+        serverRoot,
+        description,
+      }: {
+        jobUrl: string;
+        serverUrl: string;
+        serverRoot: string;
+        description: string;
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            query: (): Promise<{ id: number; url: string }[]> =>
+              Promise.resolve([{ id: 7, url: jobUrl }]),
+            sendMessage: (): Promise<unknown> =>
+              Promise.resolve({ ok: true, posting: { title: "Broken Build Role", description } }),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        (window as unknown as { chrome?: unknown }).chrome = fakeChrome;
+      },
+      {
+        jobUrl: `${site.url}/e2e/fixture-job.html`,
+        serverUrl: capture.url,
+        serverRoot: dir,
+        description: JD,
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    await page.locator("#company").fill("Acme");
+    await page.locator("#save").click();
+
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#build-line")).toContainText("Build failed");
+    await expect(page.locator("#build-output")).not.toBeEmpty();
+    await expect(page.locator("#mark-applied")).toBeDisabled();
+    // One box only: the status that said Saving… is gone.
+    await expect(page.locator("#status")).toBeHidden();
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});
 
 test("popup save creates an application through the real server", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
