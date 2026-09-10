@@ -3,3 +3,12 @@
 .resume.tmp
 /tmp/
 templates/*.pdf
+
+# Private: application records, employment history, personal notes.
+# This repo is publishable only with these untracked — they stay on
+# this machine. Do NOT delete these lines (see README "Privacy").
+applications/
+applications.csv
+content/
+docs/
+.agents/

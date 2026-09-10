@@ -49,5 +49,15 @@ you edit.
 - `docs/` — source material only (project write-ups, course notes, job-board
   lists). Never compiled into a resume; background reading for tailoring.
 
-Compiled PDFs are committed on purpose: they're the record of what you actually
-sent, and they shouldn't change when the library does.
+Compiled PDFs stay local on purpose: they're the record of what you actually
+sent. They live in `applications/`, which is git-ignored (see Privacy
+below), so they never leave this machine.
+
+## Privacy — do not weaken .gitignore
+
+This repo is safe to publish only because `.gitignore` keeps the private
+paths untracked: `applications/`, `applications.csv`, `content/`, `docs/`,
+`.agents/`. They live on this machine, not in git going forward. Do not
+delete those lines: pushing without them would publish job postings,
+resumes, and employment history. (Past commits still contain those files;
+rewriting history is a separate, deliberate job.)
