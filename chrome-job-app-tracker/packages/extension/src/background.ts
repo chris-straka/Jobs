@@ -181,6 +181,16 @@ interface OpenResult {
   via?: string;
 }
 
+/** Pill "List" link: content scripts cannot open tabs themselves. */
+async function openDashboard(): Promise<{ ok: boolean }> {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /**
  * Stash the pill's verdict-time posting for the popup that is about to
  * open: the popup cannot always read the tab itself (programmatic
@@ -254,6 +264,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "JAT_FP_UNREPORT") {
     void unreportFalsePositive(String(msg.host ?? "").toLowerCase()).then(sendResponse);
+    return true;
+  }
+  if (msg?.type === "JAT_OPEN_DASHBOARD") {
+    void openDashboard().then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_SHOW_BADGE") {

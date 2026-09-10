@@ -166,7 +166,11 @@ function showPill(html: string, actions: Record<string, () => void>): void {
     "padding:4px 12px;font:inherit;cursor:pointer";
   pill.innerHTML = `<style>#${PILL_ID} button{${btn}}</style>` + html;
   for (const [label, fn] of Object.entries(actions)) {
-    pill.querySelector(`[data-act='${label}']`)?.addEventListener("click", fn);
+    // preventDefault for anchors (they carry href for the pointer cursor).
+    pill.querySelector(`[data-act='${label}']`)?.addEventListener("click", (e) => {
+      e.preventDefault();
+      fn();
+    });
   }
   document.body.appendChild(pill);
 }
@@ -226,10 +230,15 @@ function reminderPill(mode: PillMode): void {
           if ((r as { ok?: boolean } | null)?.ok === true) {
             showPill(
               `<div style="display:flex;gap:8px;align-items:center">` +
-                `<span>Muted ✓</span>` +
+                `<span>Added to the <a href="#" data-act="dash">List</a> ✓</span>` +
                 `<button data-act="undo">Undo</button>` +
                 `<button data-act="x">✕</button></div>`,
               {
+                dash: () => {
+                  void chrome.runtime
+                    .sendMessage({ type: "JAT_OPEN_DASHBOARD" })
+                    .catch(() => {});
+                },
                 undo: () => {
                   void chrome.runtime
                     .sendMessage({ type: "JAT_FP_UNREPORT", host: location.hostname })

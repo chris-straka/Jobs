@@ -93,12 +93,16 @@ test("content script extracts the posting from the real bundle", async ({ page }
 
     // "False positive" swaps the pill for a mute confirm and records this host.
     await page.locator("#jat-pill button[data-act='no']").click();
-    await expect(page.locator("#jat-pill")).toContainText("Muted");
+    await expect(page.locator("#jat-pill")).toContainText("Added to the");
     await expect(page.locator("#jat-pill button[data-act='undo']")).toBeVisible();
     const store = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
     expect(store["fpReported"]).toContain("127.0.0.1");
+    // "List" opens the Manage page without dismissing the confirm.
+    await page.locator("#jat-pill a[data-act='dash']").click();
+    expect(await messages(page)).toContain("JAT_OPEN_DASHBOARD");
+    await expect(page.locator("#jat-pill")).toContainText("Added to the");
     // Undo puts the pill back and un-records the host.
     await page.locator("#jat-pill button[data-act='undo']").click();
     await expect(page.locator("#jat-pill button[data-act='open']")).toHaveText("Open");

@@ -8,6 +8,7 @@ type Listener = (
 
 const listeners: Listener[] = [];
 const fetchCalls: { url: string; init?: RequestInit }[] = [];
+const createdTabs: { url?: string }[] = [];
 let routes: Record<string, { ok: boolean; body: unknown } | Error> = {};
 let popupOpens = 0;
 let popupFails = false;
@@ -45,7 +46,16 @@ const prevFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
       popupOpens++;
     },
   },
-  runtime: { onMessage: { addListener: (fn: Listener): void => void listeners.push(fn) } },
+  runtime: {
+    onMessage: { addListener: (fn: Listener): void => void listeners.push(fn) },
+    getURL: (p: string): string => `chrome-extension://fake/${p}`,
+  },
+  tabs: {
+    create: async (opts: { url?: string }): Promise<{ url?: string }> => {
+      createdTabs.push(opts);
+      return opts;
+    },
+  },
 };
 (globalThis as unknown as { fetch?: unknown }).fetch = async (
   url: string,
@@ -67,6 +77,7 @@ afterAll(() => {
 
 beforeEach(() => {
   fetchCalls.length = 0;
+  createdTabs.length = 0;
   routes = {};
   popupOpens = 0;
   popupFails = false;
@@ -241,6 +252,13 @@ describe("JAT_FP_UNREPORT", () => {
       fpReported?: string[];
     };
     expect(body.fpReported).toEqual([]);
+  });
+});
+
+describe("JAT_OPEN_DASHBOARD", () => {
+  it("opens the Manage page in a new tab", async () => {
+    expect(await send("JAT_OPEN_DASHBOARD")).toEqual({ ok: true });
+    expect(createdTabs).toEqual([{ url: "chrome-extension://fake/dashboard.html" }]);
   });
 });
 
