@@ -161,29 +161,6 @@ async function nativeCall(msg: Record<string, unknown>): Promise<unknown | null>
 let nativeRunning = false;
 let nativeWorks = false;
 
-/** Armed confirm action; null when the next click only asks. */
-let armedAction: "start" | "stop" | null = null;
-let armTimer: ReturnType<typeof setTimeout> | undefined;
-
-function renderActionLabel(): void {
-  el("health-action").textContent = !nativeWorks
-    ? ""
-    : armedAction === "start"
-      ? "Start server?"
-      : armedAction === "stop"
-        ? "Stop server?"
-        : nativeRunning
-          ? "Stop server"
-          : "Start server";
-}
-
-function disarm(): void {
-  armedAction = null;
-  clearTimeout(armTimer);
-  renderActionLabel();
-  if (el("status").textContent?.startsWith("Click ")) show("");
-}
-
 async function refreshNative(): Promise<void> {
   const status = (await nativeCall({ cmd: "status" })) as {
     ok?: boolean;
@@ -194,7 +171,11 @@ async function refreshNative(): Promise<void> {
   nativeRunning = works && status.running === true;
   const pill = el("health") as HTMLButtonElement;
   pill.disabled = !works;
-  renderActionLabel();
+  el("health-action").textContent = works
+    ? nativeRunning
+      ? "Stop server?"
+      : "Start server?"
+    : "";
   el("copy-row").hidden = works;
   if (!works) {
     const hint = el("host-hint");
@@ -638,19 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));
   el("health").addEventListener("click", () => {
     if (!nativeWorks) return;
-    // Two-step confirm: the first click only asks the question, the
-    // second executes. Arming lapses after a few seconds.
-    const action = nativeRunning ? "stop" : "start";
-    if (armedAction !== action) {
-      armedAction = action;
-      clearTimeout(armTimer);
-      armTimer = setTimeout(disarm, 4000);
-      renderActionLabel();
-      show(action === "stop" ? "Click Stop again to confirm." : "Click Start again to confirm.");
-      return;
-    }
-    disarm();
-    void (action === "stop" ? nativeStop() : nativeStart());
+    void (nativeRunning ? nativeStop() : nativeStart());
   });
   el("open-dashboard").addEventListener("click", () => void openDashboard());
   void (async () => {

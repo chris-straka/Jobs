@@ -241,21 +241,13 @@ test("native toggle starts and stops the server through the host", async ({ page
     await expect(page.locator("#health")).toBeEnabled();
     await expect(page.locator("#copy-row")).toBeHidden();
 
-    // Two-step confirm: the first click only asks the question.
-    await page.locator("#health").click();
-    await expect(page.locator("#status")).toContainText("Click Start again to confirm.");
-    await expect(page.locator("#health")).toContainText("Start server?");
-
     await page.locator("#health").click();
     await expect(page.locator("#status")).toContainText("Server starting");
-    await expect(page.locator("#health")).toContainText("Stop server");
-
-    await page.locator("#health").click();
-    await expect(page.locator("#status")).toContainText("Click Stop again to confirm.");
+    await expect(page.locator("#health")).toContainText("Stop server?");
 
     await page.locator("#health").click();
     await expect(page.locator("#status")).toContainText("Server stopped");
-    await expect(page.locator("#health")).toContainText("Start server");
+    await expect(page.locator("#health")).toContainText("Start server?");
 
     const calls = await page.evaluate(
       () => (window as unknown as { __jatCalls?: string[] }).__jatCalls ?? [],
