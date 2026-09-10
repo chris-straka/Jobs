@@ -121,7 +121,9 @@ describe("agent tailoring", () => {
       env: {},
       spawnFn: async (bin, args) => {
         expect(bin.endsWith("/muse")).toBe(true);
-        expect(args).toContain("--yolo");
+        expect(args).not.toContain("--yolo");
+        expect(args).toContain("--approval-mode");
+        expect(args).toContain("never");
         expect(args).toContain(tmp);
         await writeFile(
           path.join(tmp, folder, "resume.typ"),
