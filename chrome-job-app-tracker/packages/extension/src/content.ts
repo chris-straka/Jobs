@@ -202,11 +202,18 @@ function reminderPill(mode: PillMode): void {
     `<button data-act="x">✕</button>`;
   showPill(`<div style="display:flex;gap:8px">${buttons}</div>`, {
     // The background routes Open (tracked folder vs popup form) because
-    // content scripts can open neither directly. The pill only goes away
-    // on success, so a failed open leaves the page as it was.
+    // content scripts can open neither directly. The posting rides along:
+    // the popup cannot always read the tab itself, so the pill hands over
+    // the exact text its verdict used. The pill only goes away on success,
+    // so a failed open leaves the page as it was.
     open: () => {
+      const posting = cachedPosting ?? readPosting();
       void chrome.runtime
-        .sendMessage({ type: "JAT_OPEN", url: location.href })
+        .sendMessage({
+          type: "JAT_OPEN",
+          url: location.href,
+          posting: { title: posting.title, description: posting.description },
+        })
         .then((r: unknown) => {
           if ((r as { ok?: boolean } | null)?.ok === true) removePill();
         })
@@ -215,8 +222,18 @@ function reminderPill(mode: PillMode): void {
     mark: markAppliedAction,
     no: () => {
       void chrome.runtime
-        .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname })
-        .then(removePill);
+        .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname, url: location.href })
+        .then((r: unknown) => {
+          // A tracked posting can never be a false positive: the report is
+          // refused, and the pill says what it is instead of vanishing.
+          if ((r as { ok?: boolean } | null)?.ok === true) {
+            removePill();
+          } else {
+            showPill(`<div>Already saved ✓ — can't mute a tracked posting.</div>`, {
+              x: removePill,
+            });
+          }
+        });
     },
     x: removePill,
   });
@@ -267,13 +284,19 @@ function watchApplyClicks(): void {
 }
 
 // Kept dependency-free (no shared imports) so the content bundle stays tiny.
+let cachedPosting: Posting | null = null;
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === "JAT_GET_POSTING") sendResponse({ ok: true, posting: readPosting() });
+  // The verdict-time posting: the pill and the popup then always agree.
+  if (msg?.type === "JAT_GET_POSTING") {
+    sendResponse({ ok: true, posting: cachedPosting ?? readPosting() });
+  }
 });
 
 void (async () => {
   if (await denied()) return;
   const posting = readPosting();
+  cachedPosting = posting;
   const verdict = postingSignals({
     hasApplyButton: hasApplyButton(),
     descriptionLength: posting.description.length,

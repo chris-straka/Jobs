@@ -113,3 +113,21 @@ export const OpenResponse = z.object({
   via: z.enum(["code", "finder"]),
 });
 export type OpenResponse = z.infer<typeof OpenResponse>;
+
+/**
+ * Pill-to-popup handoff: the content script stashes the exact posting the
+ * pill verdict used, because the popup's own tab query is not always
+ * permitted to see the tab (programmatic openPopup grants no activeTab).
+ */
+export const PendingPosting = z.object({
+  url: z.string(),
+  title: z.string(),
+  description: z.string(),
+  at: z.number(),
+});
+export type PendingPosting = z.infer<typeof PendingPosting>;
+
+/** Pill handoff freshness: Open is always followed immediately by the popup. */
+export const PENDING_POSTING_TTL_MS = 60_000;
+
+export const PENDING_POSTING_KEY = "pendingPosting";

@@ -1,4 +1,12 @@
-import { CaptureRequest, CaptureResponse, ResolveResponse, StatusResponse } from "@jat/shared";
+import {
+  CaptureRequest,
+  CaptureResponse,
+  PENDING_POSTING_KEY,
+  PENDING_POSTING_TTL_MS,
+  PendingPosting,
+  ResolveResponse,
+  StatusResponse,
+} from "@jat/shared";
 import { guessCompany } from "@jat/shared";
 import { detectTrack, guessRegion, samePostingText } from "./extract.js";
 
@@ -15,6 +23,14 @@ function show(text: string): void {
 }
 
 let serverBaseUrl = DEFAULT_SERVER;
+
+/**
+ * Tab URL behind the current form: the stash the pill handed over, or the
+ * live tab prefill read. Save and Mark applied reuse it so they keep
+ * working where the live tab query sees nothing (programmatic openPopup
+ * grants no activeTab).
+ */
+let prefilledTabUrl = "";
 
 /** Fixed loopback URL; tests override it via stored prefs (no UI for this). */
 function serverBase(): string {
@@ -259,14 +275,45 @@ async function prefill(): Promise<void> {
   }
   const storedRegion = stored.region === "us" || stored.region === "uk" ? stored.region : "ca";
 
+  // Pill-Open handoff: the exact posting the pill verdict used. The live
+  // tab query is not always permitted to see the tab (programmatic
+  // openPopup grants no activeTab), so the stash wins whenever the tab is
+  // hidden or agrees with it; a visible, different tab means stale stash.
+  let stash: PendingPosting | null = null;
+  try {
+    const s = await chrome.storage.session.get([PENDING_POSTING_KEY]);
+    const parsed = PendingPosting.safeParse(s[PENDING_POSTING_KEY]);
+    if (parsed.success && Date.now() - parsed.data.at < PENDING_POSTING_TTL_MS) {
+      stash = parsed.data;
+    }
+  } catch {
+    // session storage unavailable — live tab read only
+  }
+
   let tabUrl = "";
-  let title = "";
-  let description = "";
+  let tabId: number | undefined;
   try {
     const tab = await currentTab();
     tabUrl = tab.url ?? "";
+    tabId = tab.id;
+  } catch {
+    // no tab access (e.g. chrome://) — stash or manual paste mode
+  }
+
+  let title = "";
+  let description = "";
+  if (stash && (!tabUrl || tabUrl === stash.url)) {
+    tabUrl = stash.url;
+    title = stash.title;
+    description = stash.description;
     try {
-      const res = (await chrome.tabs.sendMessage(tab.id!, { type: "JAT_GET_POSTING" })) as {
+      await chrome.storage.session.remove([PENDING_POSTING_KEY]);
+    } catch {
+      // stays until TTL expiry — harmless, the URL check guards reuse
+    }
+  } else if (tabId !== undefined) {
+    try {
+      const res = (await chrome.tabs.sendMessage(tabId, { type: "JAT_GET_POSTING" })) as {
         ok?: boolean;
         posting?: { title?: string; description?: string };
       };
@@ -277,9 +324,8 @@ async function prefill(): Promise<void> {
     } catch {
       // content script not on this page — user pastes manually
     }
-  } catch {
-    // no tab access (e.g. chrome://) — manual paste mode
   }
+  prefilledTabUrl = tabUrl;
   (el("company") as HTMLInputElement).value = capitalize(guessCompany(tabUrl));
   (el("role") as HTMLInputElement).value = title;
   (el("description") as HTMLTextAreaElement).value = description;
@@ -413,12 +459,14 @@ async function save(): Promise<void> {
   const region = (el("region") as HTMLSelectElement).value;
   await chrome.storage.local.set({ region });
 
-  let tabUrl: string;
-  try {
-    tabUrl = (await currentTab()).url ?? "";
-  } catch {
-    show("No tab URL — paste the posting URL into the description first line? Aborted.");
-    return;
+  let tabUrl = prefilledTabUrl;
+  if (!tabUrl) {
+    try {
+      tabUrl = (await currentTab()).url ?? "";
+    } catch {
+      show("No tab URL — paste the posting URL into the description first line? Aborted.");
+      return;
+    }
   }
   const role = (el("role") as HTMLInputElement).value.trim();
   const description = (el("description") as HTMLTextAreaElement).value;
@@ -481,12 +529,14 @@ async function save(): Promise<void> {
 }
 
 async function markApplied(): Promise<void> {
-  let tabUrl: string;
-  try {
-    tabUrl = (await currentTab()).url ?? "";
-  } catch {
-    show("No tab URL — nothing to mark.");
-    return;
+  let tabUrl = prefilledTabUrl;
+  if (!tabUrl) {
+    try {
+      tabUrl = (await currentTab()).url ?? "";
+    } catch {
+      show("No tab URL — nothing to mark.");
+      return;
+    }
   }
   show("Marking applied…");
   let res: Response;

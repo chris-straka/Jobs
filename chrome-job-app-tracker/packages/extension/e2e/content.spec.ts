@@ -99,39 +99,53 @@ test("content script extracts the posting from the real bundle", async ({ page }
   }
 });
 
-/** Fake background that answers pill state and records every message type. */
-async function bootPill(page: Page, pillState: { tracked: boolean; applied: boolean }): Promise<void> {
-  await page.addInitScript((state: { tracked: boolean; applied: boolean }) => {
-    const listeners: MessageListener[] = [];
-    const messages: string[] = [];
-    const fakeChrome = {
-      runtime: {
-        onMessage: {
-          addListener: (fn: MessageListener): void => {
-            listeners.push(fn);
+/** Fake background that answers pill state and records every message. */
+async function bootPill(
+  page: Page,
+  pillState: { tracked: boolean; applied: boolean },
+  fpResponse: unknown = { ok: true },
+): Promise<void> {
+  await page.addInitScript(
+    ({ state, fp }: { state: { tracked: boolean; applied: boolean }; fp: unknown }) => {
+      const listeners: MessageListener[] = [];
+      const messages: string[] = [];
+      let lastOpen: unknown = null;
+      const fakeChrome = {
+        runtime: {
+          onMessage: {
+            addListener: (fn: MessageListener): void => {
+              listeners.push(fn);
+            },
+          },
+          sendMessage: (msg: { type?: string }): Promise<unknown> => {
+            messages.push(msg?.type ?? "");
+            if (msg?.type === "JAT_PILL_STATE") return Promise.resolve(state);
+            if (msg?.type === "JAT_MARK_APPLIED") return Promise.resolve({ ok: true });
+            if (msg?.type === "JAT_FP_REPORT") return Promise.resolve(fp);
+            if (msg?.type === "JAT_OPEN") {
+              lastOpen = msg;
+              return Promise.resolve({ ok: true, via: "popup" });
+            }
+            return Promise.resolve({ ok: true });
           },
         },
-        sendMessage: (msg: { type?: string }): Promise<unknown> => {
-          messages.push(msg?.type ?? "");
-          if (msg?.type === "JAT_PILL_STATE") return Promise.resolve(state);
-          if (msg?.type === "JAT_MARK_APPLIED") return Promise.resolve({ ok: true });
-          if (msg?.type === "JAT_OPEN") return Promise.resolve({ ok: true, via: "popup" });
-          return Promise.resolve({ ok: true });
+        storage: {
+          local: {
+            get: (): Promise<Record<string, unknown>> => Promise.resolve({}),
+            set: (): Promise<void> => Promise.resolve(),
+          },
         },
-      },
-      storage: {
-        local: {
-          get: (): Promise<Record<string, unknown>> => Promise.resolve({}),
-          set: (): Promise<void> => Promise.resolve(),
-        },
-      },
-    };
-    const w = window as unknown as { chrome?: unknown } & {
-      __jatMessages?: string[];
-    };
-    w.chrome = fakeChrome;
-    w.__jatMessages = messages;
-  }, pillState);
+      };
+      const w = window as unknown as { chrome?: unknown } & {
+        __jatMessages?: string[];
+        __jatLastOpen?: unknown;
+      };
+      w.chrome = fakeChrome;
+      w.__jatMessages = messages;
+      Object.defineProperty(w, "__jatLastOpen", { get: () => lastOpen, configurable: true });
+    },
+    { state: pillState, fp: fpResponse },
+  );
 }
 
 async function messages(page: Page): Promise<string[]> {
@@ -178,6 +192,42 @@ test("tracked applied pill shows only open and dismiss", async ({ page }) => {
     await expect(page.locator("#jat-pill button")).toHaveCount(2);
     await expect(page.locator("#jat-pill button[data-act='mark']")).toHaveCount(0);
     await expect(page.locator("#jat-pill button[data-act='no']")).toHaveCount(0);
+  } finally {
+    site.close();
+  }
+});
+
+test("open hands the verdict-time posting to the background", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: false, applied: false });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await page.locator("#jat-pill button[data-act='open']").click();
+    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    const lastOpen = (await page.evaluate(
+      () => (window as unknown as { __jatLastOpen?: unknown }).__jatLastOpen,
+    )) as { url?: string; posting?: { title?: string; description?: string } };
+    expect(lastOpen?.url).toContain("/e2e/fixture-job.html");
+    expect(lastOpen?.posting?.title).toContain("Senior Backend Engineer");
+    expect(lastOpen?.posting?.description).toContain("exactly-once");
+  } finally {
+    site.close();
+  }
+});
+
+test("false-positive on a tracked posting is refused, not recorded", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: false, applied: false }, { ok: false, reason: "tracked" });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await page.locator("#jat-pill button[data-act='no']").click();
+    // The pill stays and says what it is instead of vanishing.
+    await expect(page.locator("#jat-pill")).toContainText("Already saved");
+    await expect(page.locator("#jat-pill")).toHaveCount(1);
   } finally {
     site.close();
   }

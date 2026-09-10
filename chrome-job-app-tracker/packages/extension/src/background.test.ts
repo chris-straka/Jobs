@@ -11,12 +11,34 @@ const fetchCalls: { url: string; init?: RequestInit }[] = [];
 let routes: Record<string, { ok: boolean; body: unknown } | Error> = {};
 let popupOpens = 0;
 let popupFails = false;
+const localStore: Record<string, unknown> = {};
+const sessionStore: Record<string, unknown> = {};
 
 const prevChrome = (globalThis as unknown as { chrome?: unknown }).chrome;
 const prevFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
 
 (globalThis as unknown as { chrome?: unknown }).chrome = {
-  storage: { local: { get: async () => ({ server: "http://127.0.0.1:9999" }) } },
+  storage: {
+    local: {
+      get: async (keys: string[]): Promise<Record<string, unknown>> => ({
+        server: "http://127.0.0.1:9999",
+        ...Object.fromEntries(keys.map((k) => [k, localStore[k]])),
+      }),
+      set: async (obj: Record<string, unknown>): Promise<void> => {
+        Object.assign(localStore, obj);
+      },
+    },
+    session: {
+      get: async (keys: string[]): Promise<Record<string, unknown>> =>
+        Object.fromEntries(keys.map((k) => [k, sessionStore[k]])),
+      set: async (obj: Record<string, unknown>): Promise<void> => {
+        Object.assign(sessionStore, obj);
+      },
+      remove: async (keys: string[]): Promise<void> => {
+        for (const k of keys) delete sessionStore[k];
+      },
+    },
+  },
   action: {
     openPopup: async (): Promise<void> => {
       if (popupFails) throw new Error("no activation");
@@ -48,6 +70,8 @@ beforeEach(() => {
   routes = {};
   popupOpens = 0;
   popupFails = false;
+  for (const k of Object.keys(localStore)) delete localStore[k];
+  for (const k of Object.keys(sessionStore)) delete sessionStore[k];
 });
 
 function send(type: string, extra: Record<string, unknown> = {}): Promise<unknown> {
@@ -148,6 +172,46 @@ describe("JAT_OPEN", () => {
     routes.resolve = new Error("connection refused");
     popupFails = true;
     expect(await send("JAT_OPEN", { url: "https://example.com/jobs/1" })).toEqual({ ok: false });
+  });
+});
+
+describe("JAT_OPEN handoff", () => {
+  it("stashes the pill posting for the popup", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    const url = "https://example.com/jobs/1";
+    await send("JAT_OPEN", {
+      url,
+      posting: { title: "Backend Engineer", description: "Long posting text here." },
+    });
+    const stashed = sessionStore["pendingPosting"] as Record<string, unknown>;
+    expect(stashed.url).toBe(url);
+    expect(stashed.title).toBe("Backend Engineer");
+    expect(stashed.description).toBe("Long posting text here.");
+    expect(typeof stashed.at).toBe("number");
+  });
+
+  it("skips the stash when there is no posting", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    await send("JAT_OPEN", { url: "https://example.com/jobs/1" });
+    expect(sessionStore["pendingPosting"]).toBeUndefined();
+  });
+});
+
+describe("JAT_FP_REPORT", () => {
+  it("records the host for untracked URLs", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    expect(await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" })).toEqual({
+      ok: true,
+    });
+    expect(localStore["fpReported"]).toEqual(["example.com"]);
+  });
+
+  it("refuses tracked URLs — a saved posting is never a false positive", async () => {
+    routes.resolve = { ok: true, body: resolveBody("applications/2026-09-09_acme_x", "draft") };
+    expect(
+      await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" }),
+    ).toEqual({ ok: false, reason: "tracked" });
+    expect(localStore["fpReported"]).toBeUndefined();
   });
 });
 

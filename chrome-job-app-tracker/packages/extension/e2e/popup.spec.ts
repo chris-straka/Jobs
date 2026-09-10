@@ -258,6 +258,111 @@ test("native toggle starts and stops the server through the host", async ({ page
   }
 });
 
+test("pill-open handoff prefills from stash when the tab URL is hidden", async ({ page }) => {
+  const { dir, cleanup } = await mkFixtureRepo();
+  const capture = await startCaptureServer(dir);
+  const site = await startStatic(pkgDir);
+  try {
+    const jobUrl = `${site.url}/e2e/fixture-job.html`;
+    await page.addInitScript(
+      ({
+        serverUrl,
+        serverRoot,
+        stash,
+      }: {
+        serverUrl: string;
+        serverRoot: string;
+        stash: { url: string; title: string; description: string; at: number };
+      }) => {
+        const store: Record<string, unknown> = { server: serverUrl, serverRoot };
+        const sessionStore: Record<string, unknown> = { pendingPosting: stash };
+        const removedKeys: string[][] = [];
+        const tabMessages: unknown[] = [];
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+            session: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, sessionStore[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(sessionStore, obj);
+                return Promise.resolve();
+              },
+              remove: (keys: string[]): Promise<void> => {
+                removedKeys.push(keys);
+                for (const k of keys) delete sessionStore[k];
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            // No url: programmatic openPopup grants no activeTab.
+            query: (): Promise<{ id: number }[]> => Promise.resolve([{ id: 7 }]),
+            sendMessage: (...args: unknown[]): Promise<unknown> => {
+              tabMessages.push(args[1]);
+              return Promise.resolve({ ok: false });
+            },
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+          },
+        };
+        const w = window as unknown as {
+          chrome?: unknown;
+          __jatRemoved?: string[][];
+          __jatTabMessages?: unknown[];
+        };
+        w.chrome = fakeChrome;
+        w.__jatRemoved = removedKeys;
+        w.__jatTabMessages = tabMessages;
+      },
+      {
+        serverUrl: capture.url,
+        serverRoot: dir,
+        stash: { url: jobUrl, title: "Backend Engineer", description: JD, at: Date.now() },
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    // The form is prefilled from the stash — never the empty state —
+    // and the live tab read is never attempted.
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await expect(page.locator("#empty-state")).toBeHidden();
+    await expect(page.locator("#role")).toHaveValue("Backend Engineer");
+    await expect(page.locator("#description")).toHaveValue(JD);
+    const removed = await page.evaluate(
+      () => (window as unknown as { __jatRemoved?: string[][] }).__jatRemoved ?? [],
+    );
+    expect(removed).toEqual([["pendingPosting"]]);
+    const tabMessages = await page.evaluate(
+      () => (window as unknown as { __jatTabMessages?: unknown[] }).__jatTabMessages ?? [],
+    );
+    expect(tabMessages).toEqual([]);
+
+    // The stashed posting saves end to end under the stashed URL.
+    await page.locator("#company").fill("Acme");
+    await page.locator("#save").click();
+    await expect(page.locator("#result")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#build-line")).toContainText("one page");
+    const apps = await readdir(path.join(dir, "applications"));
+    expect(apps).toHaveLength(1);
+    const jobMd = await readFile(path.join(dir, "applications", apps[0], "job.md"), "utf8");
+    // addApplication stores the canonical URL (https, no tracking params).
+    expect(jobMd).toContain("/e2e/fixture-job.html");
+  } finally {
+    site.close();
+    capture.stop();
+    await cleanup();
+  }
+});
+
 test("tracked posting reopens in saved state, not the form", async ({ page }) => {
   const { dir, cleanup } = await mkFixtureRepo();
   const capture = await startCaptureServer(dir);

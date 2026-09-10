@@ -1,4 +1,10 @@
-import { OpenResponse, ResolveResponse, StatusResponse } from "@jat/shared";
+import {
+  PENDING_POSTING_KEY,
+  PendingPosting,
+  OpenResponse,
+  ResolveResponse,
+  StatusResponse,
+} from "@jat/shared";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -34,16 +40,34 @@ async function markApplied(url: string): Promise<MarkResult> {
   return { ok: true, folder: changed.data.folder };
 }
 
+interface FpResult {
+  ok: boolean;
+  reason?: string;
+}
+
 /**
  * Pill reports land in fpReported, hand adds in fpHosts. The pill stays
- * hidden on both; the dashboard shows them as separate sections.
+ * hidden on both; the dashboard shows them as separate sections. A tracked
+ * URL is never a false positive — the report is refused so a saved posting
+ * can never be muted out of the pill.
  */
-async function reportFalsePositive(host: string): Promise<void> {
+async function reportFalsePositive(host: string, url: string): Promise<FpResult> {
+  if (url) {
+    const base = await serverBase();
+    try {
+      const res = await fetch(`${base}/api/resolve?url=${encodeURIComponent(url)}`);
+      const parsed = ResolveResponse.safeParse(await res.json());
+      if (parsed.success && parsed.data.folder) return { ok: false, reason: "tracked" };
+    } catch {
+      // Server offline — nothing tracked that we know of; record the report.
+    }
+  }
   const stored = await chrome.storage.local.get(["fpReported"]);
   const hosts = Array.isArray(stored.fpReported) ? stored.fpReported : [];
   if (!hosts.includes(host)) {
     await chrome.storage.local.set({ fpReported: [...hosts, host] });
   }
+  return { ok: true };
 }
 
 interface PillState {
@@ -84,12 +108,33 @@ interface OpenResult {
 }
 
 /**
+ * Stash the pill's verdict-time posting for the popup that is about to
+ * open: the popup cannot always read the tab itself (programmatic
+ * openPopup grants no activeTab), so this handoff is what prefills it.
+ */
+async function stashPendingPosting(url: string, posting: unknown): Promise<void> {
+  const p = (posting ?? {}) as { title?: unknown; description?: unknown };
+  const title = typeof p.title === "string" ? p.title : "";
+  const description = typeof p.description === "string" ? p.description : "";
+  // Nothing to hand over — leave any live tab read (or older stash) alone.
+  if (!url || (title === "" && description === "")) return;
+  const parsed = PendingPosting.safeParse({ url, title, description, at: Date.now() });
+  if (!parsed.success) return;
+  try {
+    await chrome.storage.session.set({ [PENDING_POSTING_KEY]: parsed.data });
+  } catch {
+    // Session storage unavailable — the popup falls back to reading the tab.
+  }
+}
+
+/**
  * Pill Open: tracked URLs open in VS Code (or Finder without the `code`
  * CLI) via the server; everything else gets the popup form. A failed
  * folder-open falls through to the popup, whose saved state carries the
  * opener links.
  */
-async function openPosting(url: string): Promise<OpenResult> {
+async function openPosting(url: string, posting: unknown): Promise<OpenResult> {
+  await stashPendingPosting(url, posting);
   const base = await serverBase();
   try {
     const resolveRes = await fetch(`${base}/api/resolve?url=${encodeURIComponent(url)}`);
@@ -121,12 +166,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "JAT_OPEN") {
-    void openPosting(String(msg.url ?? "")).then(sendResponse);
+    void openPosting(String(msg.url ?? ""), msg.posting).then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_FP_REPORT") {
-    void reportFalsePositive(String(msg.host ?? "").toLowerCase()).then(() =>
-      sendResponse({ ok: true }),
+    void reportFalsePositive(String(msg.host ?? "").toLowerCase(), String(msg.url ?? "")).then(
+      sendResponse,
     );
     return true;
   }
