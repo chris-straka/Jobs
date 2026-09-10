@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { appFolder, canonicalPostingUrl, guessCompany } from "./urls.js";
+import { appFolder, canonicalPostingUrl, guessCompany, hostFromUrlOrHost } from "./urls.js";
 
 describe("guessCompany", () => {
   it("reads the company from ATS paths", () => {
@@ -56,5 +56,23 @@ describe("appFolder", () => {
     expect(appFolder("2026-09-09", "Acme Corp", "Backend Engineer")).toBe(
       "2026-09-09_acme-corp_backend-engineer",
     );
+  });
+});
+
+describe("hostFromUrlOrHost", () => {
+  it("reads the host from full and schemeless URLs", () => {
+    expect(hostFromUrlOrHost("https://jobs.example.com/post/123?utm_source=x")).toBe(
+      "jobs.example.com",
+    );
+    expect(hostFromUrlOrHost("example.com/jobs/1")).toBe("example.com");
+    expect(hostFromUrlOrHost("  New-Site.com ")).toBe("new-site.com");
+    expect(hostFromUrlOrHost("example.com:8080/path")).toBe("example.com");
+  });
+
+  it("rejects garbage with no usable host", () => {
+    expect(hostFromUrlOrHost("not a url!!")).toBeNull();
+    expect(hostFromUrlOrHost("not a host!!")).toBeNull();
+    expect(hostFromUrlOrHost("")).toBeNull();
+    expect(hostFromUrlOrHost("ftp://example.com/x")).toBeNull();
   });
 });

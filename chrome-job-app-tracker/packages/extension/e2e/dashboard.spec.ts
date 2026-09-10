@@ -95,6 +95,70 @@ test("dashboard lists, adds, and removes false-positive hosts", async ({ page })
   }
 });
 
+test("remove reaches the file and stays removed with a live server", async ({ page }) => {
+  await page.addInitScript(() => {
+    const store: Record<string, unknown> = { falsePositives: ["example.com"] };
+    // In-memory stand-in for /api/ignore on a live server.
+    const box: { file: unknown } = { file: { falsePositives: ["example.com"] } };
+    const listeners: ((changes: unknown, area: string) => void)[] = [];
+    const fakeChrome = {
+      storage: {
+        local: {
+          get: (keys: string[]): Promise<Record<string, unknown>> =>
+            Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+          set: (obj: Record<string, unknown>): Promise<void> => {
+            Object.assign(store, obj);
+            for (const l of listeners) l(obj, "local");
+            return Promise.resolve();
+          },
+          remove: (keys: string[]): Promise<void> => {
+            for (const k of keys) delete store[k];
+            return Promise.resolve();
+          },
+        },
+        onChanged: {
+          addListener: (l: (changes: unknown, area: string) => void): void => {
+            listeners.push(l);
+          },
+        },
+      },
+    };
+    const w = window as unknown as {
+      chrome?: unknown;
+      fetch?: unknown;
+      __jatStore?: Record<string, unknown>;
+      __jatBox?: { file: unknown };
+    };
+    w.chrome = fakeChrome;
+    w.__jatStore = store;
+    w.__jatBox = box;
+    w.fetch = async (url: unknown, init?: { method?: string; body?: string }): Promise<unknown> => {
+      if (!String(url).includes("/api/ignore")) throw new Error("offline");
+      if (init?.method === "POST") box.file = JSON.parse(String(init.body));
+      return { ok: true, json: async () => box.file };
+    };
+  });
+
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/dashboard.html`);
+    await expect(page.locator("#fp-list li")).toHaveCount(1);
+    await page.locator('#fp-list li:has(span:text-is("example.com")) button').click();
+    // The row stays gone: re-healing from the file must not resurrect it.
+    await expect(page.locator("#fp-list li")).toHaveCount(0);
+    await expect(page.locator("#fp-empty")).toBeVisible();
+    const state = await page.evaluate(() => {
+      const w = window as unknown as { __jatStore?: Record<string, unknown>; __jatBox?: { file: unknown } };
+      return { store: w.__jatStore ?? {}, file: w.__jatBox?.file };
+    });
+    expect(state.store["falsePositives"]).toEqual([]);
+    expect(state.file).toEqual({ falsePositives: [] });
+    await expect(page.locator("#fp-list li")).toHaveCount(0);
+  } finally {
+    site.close();
+  }
+});
+
 test("popup opens the dashboard in a new tab", async ({ page }) => {
   await page.addInitScript(() => {
     const opened: string[] = [];

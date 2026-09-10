@@ -67,13 +67,17 @@ export { slug };
  */
 export function hostFromUrlOrHost(raw: string): string | null {
   const t = raw.trim();
-  if (!t) return null;
-  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t) ? t : `https://${t}`;
+  // Pre-parse: some URL implementations (Chromium) percent-encode spaces
+  // instead of throwing, so whitespace must be rejected before parsing.
+  if (!t || /\s/.test(t)) return null;
+  // `://` marks a real scheme: without it `example.com:8080/path` would
+  // parse `example.com:` as the scheme instead of a host with a port.
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(t) ? t : `https://${t}`;
   try {
     const url = new URL(withScheme);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (!host || /[\s/:]/.test(host)) return null;
+    if (!host || host.includes("%") || /[\s/:]/.test(host)) return null;
     return host;
   } catch {
     return null;

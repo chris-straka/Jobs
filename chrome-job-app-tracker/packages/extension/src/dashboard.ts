@@ -74,7 +74,9 @@ async function persist(): Promise<void> {
 
 /**
  * Union the on-disk list into storage (fresh profiles, hand-edited
- * files), then push the merged result back.
+ * files), then push the merged result back. Runs once on load: re-running
+ * it after every mutation would union the still-stale file back over
+ * storage and resurrect just-removed hosts.
  */
 async function healFromFile(): Promise<void> {
   try {
@@ -128,9 +130,8 @@ async function migrateStorage(): Promise<void> {
   await setList(await getList());
 }
 
+/** Storage is the live store: renders read it, never the file. */
 async function render(): Promise<void> {
-  await migrateStorage();
-  await healFromFile();
   await renderSection();
 }
 
@@ -145,10 +146,12 @@ document.addEventListener("DOMContentLoaded", () => {
     ev.preventDefault();
     const urlInput = el("add-url") as HTMLInputElement;
     const hostInput = el("add-host") as HTMLInputElement;
+    const urlRaw = urlInput.value;
+    const hostRaw = hostInput.value;
     const adds: string[] = [];
     for (const [raw, label] of [
-      [urlInput.value, "URL"],
-      [hostInput.value, "host"],
+      [urlRaw, "URL"],
+      [hostRaw, "host"],
     ] as const) {
       if (!raw.trim()) continue;
       const host = hostFromUrlOrHost(raw);
@@ -163,16 +166,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     showError("");
+    // Clear synchronously: the async chain below must never wipe a later fill.
+    urlInput.value = "";
+    hostInput.value = "";
     void getList()
       .then((hosts) => setList([...new Set([...hosts, ...adds])].sort()))
       .then(() => persist())
-      .then(() => {
-        urlInput.value = "";
-        hostInput.value = "";
-        return render();
-      });
+      .then(() => render());
   });
-  void render();
+  // Heal once: fresh profiles and hand-edited files converge here, and
+  // every render after this reads storage only.
+  void migrateStorage()
+    .then(() => healFromFile())
+    .then(() => render());
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (
