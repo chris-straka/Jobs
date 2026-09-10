@@ -30,13 +30,18 @@ function refreshCopyButton(): void {
     : "⧉ Copy start cmd";
 }
 
+function setHealth(state: "online" | "offline" | "pending", text: string): void {
+  const pill = el("health");
+  pill.classList.remove("online", "offline", "pending");
+  pill.classList.add(state);
+  el("health-text").textContent = text;
+}
+
 async function checkHealth(): Promise<void> {
-  const dot = el("health");
   try {
     const res = await fetch(`${serverBase()}/health`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      dot.textContent = "● Job server online";
-      dot.style.color = "green";
+      setHealth("online", "Job server online");
       serverOnline = true;
       const body = (await res.json().catch(() => null)) as { root?: unknown } | null;
       if (body && typeof body.root === "string") {
@@ -44,13 +49,11 @@ async function checkHealth(): Promise<void> {
         await chrome.storage.local.set({ serverRoot: body.root });
       }
     } else {
-      dot.textContent = "● Job server error";
-      dot.style.color = "red";
+      setHealth("offline", "Job server error");
       serverOnline = false;
     }
   } catch {
-    dot.textContent = "● Job server offline";
-    dot.style.color = "red";
+    setHealth("offline", "Job server offline");
     serverOnline = false;
   }
   refreshCopyButton();
@@ -162,6 +165,19 @@ async function refreshNative(): Promise<void> {
     : "Start server";
 }
 
+/**
+ * The "Server starting…" line is stale once the server is up. It clears
+ * on a delay so tests and fast readers still see it, then re-arms while
+ * the server is still down (slow boots).
+ */
+function clearStartingWhenOnline(remaining = 3): void {
+  window.setTimeout(() => {
+    if (!el("status").textContent?.startsWith("Server starting")) return;
+    if (serverOnline) show("");
+    else if (remaining > 1) clearStartingWhenOnline(remaining - 1);
+  }, 5000);
+}
+
 async function nativeStart(): Promise<void> {
   const r = (await nativeCall({ cmd: "start" })) as { ok?: boolean; reason?: string } | null;
   if (r?.ok !== true) {
@@ -169,6 +185,7 @@ async function nativeStart(): Promise<void> {
     show(`Start failed (${r?.reason ?? "no host"}) — copy buttons below as fallback.`);
   } else {
     show("Server starting…");
+    clearStartingWhenOnline();
   }
   await checkHealth();
   await refreshNative();
@@ -257,6 +274,10 @@ async function prefill(): Promise<void> {
   (el("role") as HTMLInputElement).value = title;
   (el("description") as HTMLTextAreaElement).value = description;
   updateCount();
+  updateTrack();
+  const detected = title.trim() !== "" || description.trim() !== "";
+  el("capture-form").hidden = !detected;
+  el("empty-state").hidden = detected;
   (el("region") as HTMLSelectElement).value =
     guessRegion(tabUrl, `${title} ${description}`) || storedRegion;
 }
@@ -264,6 +285,13 @@ async function prefill(): Promise<void> {
 function updateCount(): void {
   const n = (el("description") as HTMLTextAreaElement).value.length;
   el("count").textContent = `(${n} chars)`;
+}
+
+/** Live track badge — the same detector save() uses. */
+function updateTrack(): void {
+  const role = (el("role") as HTMLInputElement).value;
+  const description = (el("description") as HTMLTextAreaElement).value;
+  el("track-badge").textContent = detectTrack(role, description).toUpperCase();
 }
 
 /**
@@ -378,6 +406,13 @@ async function markApplied(): Promise<void> {
 
 document.addEventListener("DOMContentLoaded", () => {
   (el("description") as HTMLTextAreaElement).addEventListener("input", updateCount);
+  (el("role") as HTMLInputElement).addEventListener("input", updateTrack);
+  (el("description") as HTMLTextAreaElement).addEventListener("input", updateTrack);
+  el("manual-entry").addEventListener("click", () => {
+    el("empty-state").hidden = true;
+    el("capture-form").hidden = false;
+    (el("company") as HTMLInputElement).focus();
+  });
   el("save").addEventListener("click", () => void save());
   el("mark-applied").addEventListener("click", () => void markApplied());
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));

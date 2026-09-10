@@ -7,38 +7,125 @@
       :root {
         color-scheme: light dark;
         --bg: #fff;
-        --fg: #111;
-        --muted: #666;
+        --fg: #1b1b1b;
+        --muted: #6e6e6e;
         --field: #fff;
-        --border: #ccc;
-        --btn: #f0f0f0;
+        --panel: #f4f4f3;
+        --border: #d8d8d6;
+        --btn: #efefed;
+        --btn-border: #c9c9c6;
+        --accent: #1f6feb;
+        --accent-fg: #fff;
+        --good: #1a7f37;
+        --bad: #cf222e;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #1e1e1e;
-          --fg: #e8e8e8;
-          --muted: #aaa;
-          --field: #2d2d2d;
-          --border: #555;
-          --btn: #3a3a3a;
+          --bg: #1c1c1e;
+          --fg: #e9e9e9;
+          --muted: #9d9d9d;
+          --field: #2c2c2e;
+          --panel: #262628;
+          --border: #48484c;
+          --btn: #38383c;
+          --btn-border: #5a5a5f;
+          --accent: #4c8dff;
+          --accent-fg: #fff;
+          --good: #3fb950;
+          --bad: #f85149;
         }
       }
       /* NOTE: transparent html + body radius does NOT round the popup
          window on macOS Chrome (verified by screenshot) — the frame is
          drawn by the browser. Everything inside is rounded instead. */
+      [hidden] {
+        display: none !important;
+      }
       body {
         width: 360px;
         font:
-          13px/1.4 system-ui,
+          13px/1.45 system-ui,
           sans-serif;
-        margin: 12px;
+        margin: 0;
+        padding: 14px;
         background: var(--bg);
         color: var(--fg);
       }
-      label {
-        display: block;
-        margin: 8px 0 2px;
+      /* Header: status pill left, toggle pinned right. */
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
         font-weight: 600;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      #health-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+        flex: none;
+      }
+      #health.online #health-dot {
+        background: var(--good);
+      }
+      #health.offline #health-dot {
+        background: var(--bad);
+      }
+      #health.pending #health-dot {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      #native-row {
+        margin-left: auto;
+      }
+      #srv-toggle {
+        width: auto;
+        margin-top: 0;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
+      }
+      /* Empty state replaces the form when nothing was detected. */
+      #empty-state {
+        background: var(--panel);
+        border: 1px dashed var(--btn-border);
+        border-radius: 12px;
+        padding: 18px 14px;
+        text-align: center;
+        margin: 10px 0 4px;
+      }
+      #empty-state p {
+        margin: 0 0 4px;
+        font-weight: 600;
+      }
+      #empty-state .sub {
+        margin: 0 0 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .field-label {
+        display: block;
+        margin: 10px 0 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
       }
       input,
       select,
@@ -49,31 +136,106 @@
         background: var(--field);
         color: var(--fg);
         border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 5px 7px;
+        border-radius: 8px;
+        padding: 7px 9px;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
       }
       textarea {
         height: 120px;
+        resize: vertical;
       }
-      .row {
-        display: flex;
+      /* Region is two letters; track badge takes the rest of the row. */
+      .meta-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
         gap: 8px;
+        align-items: end;
+        margin-top: 10px;
       }
-      .row[hidden] {
-        display: none;
+      .meta-grid .field-label {
+        margin-top: 0;
       }
-      .row > div {
-        flex: 1;
+      #region {
+        width: auto;
+        min-width: 78px;
+        cursor: pointer;
+      }
+      .track {
+        justify-self: end;
+        text-align: right;
+      }
+      .track .field-label {
+        margin-top: 0;
+      }
+      #track-badge {
+        display: inline-block;
+        min-width: 46px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+      button {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        margin-top: 8px;
+        padding: 7px 12px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 9px;
+        cursor: pointer;
+        transition:
+          background-color 0.15s ease,
+          border-color 0.15s ease,
+          filter 0.15s ease;
+      }
+      button:hover {
+        filter: brightness(1.06);
+      }
+      button:active {
+        filter: brightness(0.95);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: transparent;
+        color: var(--accent-fg);
+        font-weight: 600;
       }
       #status {
-        margin-top: 8px;
+        margin-top: 10px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 9px 11px;
+        font-size: 12px;
         white-space: pre-wrap;
+      }
+      #status:empty {
+        display: none;
       }
       #count {
         color: var(--muted);
-        font-size: 12px;
+        font-weight: 400;
       }
       .hint {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 9px 11px;
         color: var(--muted);
         font-size: 12px;
         white-space: pre-wrap;
@@ -93,49 +255,84 @@
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         white-space: pre-wrap;
       }
-      #toast[hidden],
-      #host-hint[hidden] {
-        display: none;
+      #toast:not([hidden]) {
+        animation: toast-in 0.18s ease-out;
       }
-      button {
-        width: 100%;
-        box-sizing: border-box;
-        font: inherit;
-        margin-top: 8px;
-        padding: 6px;
-        background: var(--btn);
-        color: var(--fg);
-        border: 1px solid var(--border);
-        border-radius: 10px;
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translate(-50%, 6px);
+        }
+      }
+      #fp-wrap {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #fp-wrap summary {
+        cursor: pointer;
+        font-weight: 600;
+        width: fit-content;
+      }
+      #fp-list {
+        margin: 6px 0 0;
+        padding-left: 18px;
+      }
+      #fp-list button {
+        width: auto;
+        margin: 0 0 0 6px;
+        padding: 1px 8px;
+        font-size: 11px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
       }
     </style>
   </head>
   <body>
-    <div id="health">● checking server…</div>
-    <div class="row" id="native-row" hidden>
-      <div><button id="srv-toggle" type="button">Start server</button></div>
+    <div class="topbar">
+      <div id="health" class="pill pending">
+        <span id="health-dot"></span><span id="health-text">Checking server…</span>
+      </div>
+      <div id="native-row" hidden><button id="srv-toggle" type="button">Start server</button></div>
     </div>
-    <div class="row" id="copy-row">
-      <div><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
-    </div>
+    <div id="copy-row"><button id="copy-srv" type="button">⧉ Copy start cmd</button></div>
     <div id="host-hint" class="hint" hidden></div>
     <div id="toast" hidden></div>
-    <label for="company">Company</label>
-    <input id="company" />
-    <label for="role">Role title</label>
-    <input id="role" />
-    <div>
-      <label for="region">Region</label>
-      <select id="region">
-        <option value="ca">CA</option>
-        <option value="us">US</option>
-        <option value="uk">UK</option>
-      </select>
+    <div id="empty-state" hidden>
+      <p>No posting detected on this page</p>
+      <p class="sub">Open a job posting, or enter the details manually.</p>
+      <button id="manual-entry" type="button">Enter details manually</button>
     </div>
-    <label for="description">Posting text <span id="count"></span></label>
-    <textarea id="description"></textarea>
-    <button id="save" type="button">Save to Jobs repo</button>
-    <button id="mark-applied" type="button">Mark applied ✓</button>
+    <div id="capture-form">
+      <label class="field-label" for="company">Company</label>
+      <input id="company" />
+      <label class="field-label" for="role">Role title</label>
+      <input id="role" />
+      <div class="meta-grid">
+        <div>
+          <label class="field-label" for="region">Region</label>
+          <select id="region">
+            <option value="ca">CA</option>
+            <option value="us">US</option>
+            <option value="uk">UK</option>
+          </select>
+        </div>
+        <div class="track">
+          <span class="field-label">Track</span>
+          <span id="track-badge">SWE</span>
+        </div>
+      </div>
+      <label class="field-label" for="description">Posting text <span id="count"></span></label>
+      <textarea id="description"></textarea>
+      <button id="save" class="primary" type="button">Save to Jobs repo</button>
+      <button id="mark-applied" type="button">Mark applied ✓</button>
+    </div>
     <div id="status"></div>
     <details id="fp-wrap">
       <summary>Ignored sites (<span id="fp-count">0</span>)</summary>
