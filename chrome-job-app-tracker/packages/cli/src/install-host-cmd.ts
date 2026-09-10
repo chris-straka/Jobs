@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -10,9 +11,12 @@ export function installHostHelp(): string {
 
 Installs the native-messaging host so the popup gets one-click Start/Stop.
 Finds the loaded extension id in the browser's preferences automatically;
-pass --id when that fails (id from chrome://extensions, Developer mode).
-ja extension runs this check automatically — this command is the explicit
-version for when the host needs reinstalling on its own.`;
+when nothing is loaded yet, predicts the id from the checkout path
+(Chrome derives it from the folder) and installs in every browser
+present. Pass --id to override (id from chrome://extensions,
+Developer mode). ja extension runs this check automatically — this
+command is the explicit version for when the host needs reinstalling
+on its own.`;
 }
 
 export interface BrowserDir {
@@ -109,24 +113,68 @@ function runInstallSh(tracker: string, id: string, browser: string): void {
   if (r.error || r.status !== 0) die("install.sh failed — see above");
 }
 
+/** Browsers actually present on this machine. */
+export function presentBrowsers(home: string = homedir()): BrowserDir[] {
+  return browserDirs(home).filter((b) => existsSync(b.dir));
+}
+
+/**
+ * Install the host for a predicted (pre-load) id in every browser
+ * present. Detection can't tell us which browser the user will load
+ * into, so cover all of them — manifests are tiny permission files.
+ */
+function installPredicted(tracker: string, id: string, browsers: BrowserDir[]): void {
+  if (browsers.length === 0) die("no supported browser found — nothing to install the host for");
+  for (const b of browsers) runInstallSh(tracker, id, b.browser);
+}
+
+/**
+ * What Chrome will assign an unpacked extension loaded from absPath:
+ * the first 128 bits of the path's SHA-256, nibbles mapped to a-p.
+ * Verified against a real Secure Preferences entry.
+ */
+export function unpackedExtensionId(absPath: string): string {
+  const digest = createHash("sha256").update(absPath, "utf8").digest();
+  let id = "";
+  for (let i = 0; i < 16; i++) {
+    id += String.fromCharCode(0x61 + (digest[i] >> 4), 0x61 + (digest[i] & 0x0f));
+  }
+  return id;
+}
+
+/** Predicted id for the first existing candidate, or null. */
+export function predictId(candidates: string[]): { id: string; path: string } | null {
+  for (const c of candidates) {
+    if (existsSync(c)) return { id: unpackedExtensionId(path.normalize(c)), path: path.normalize(c) };
+  }
+  return null;
+}
+
 /**
  * Idempotent host setup for `ja extension`: detects the loaded extension,
- * skips when the host already allows it, installs otherwise. Never dies
- * when the extension simply isn't loaded yet — that just means the user
- * hasn't reached the Load unpacked step.
+ * skips when the host already allows it, installs otherwise. When nothing
+ * is loaded yet, installs for the predicted id of the checkout copy, so
+ * the toggle works as soon as the user loads it. A wrong prediction
+ * self-heals: the next run detects the loaded id and reinstalls.
  *
  * @returns a one-line status for the caller to print
  */
 export function ensureHost(tracker: string, candidates: string[], home: string = homedir()): string {
   const detected = detectExtensionId(candidates, browserDirs(home));
-  if (!detected) {
-    return "native host: extension not loaded yet — load it, then run ja install-host";
+  if (detected) {
+    if (hostInstalled(home, detected.id, detected.browser)) {
+      return `native host ready for ${detected.id} — skipped`;
+    }
+    runInstallSh(tracker, detected.id, detected.browser);
+    return `native host installed for ${detected.id} (${detected.browser})`;
   }
-  if (hostInstalled(home, detected.id, detected.browser)) {
-    return `native host ready for ${detected.id} — skipped`;
+  const predicted = predictId(candidates);
+  if (!predicted) {
+    return "native host: no extension copy found — nothing to install for";
   }
-  runInstallSh(tracker, detected.id, detected.browser);
-  return `native host installed for ${detected.id} (${detected.browser})`;
+  const targets = presentBrowsers(home);
+  installPredicted(tracker, predicted.id, targets);
+  return `native host installed for predicted id ${predicted.id} (${targets.map((t) => t.browser).join(", ")})`;
 }
 
 export async function installHostCommand(root: string, argv: string[]): Promise<void> {
@@ -156,16 +204,24 @@ export async function installHostCommand(root: string, argv: string[]): Promise<
   const dirs = browserDirs().filter((b) => !values.browser || b.browser === values.browser);
   const detected = !values.id || !values.browser ? detectExtensionId(candidates, dirs) : null;
   const id = values.id ?? detected?.id;
-  const browser = values.browser ?? detected?.browser ?? "chrome";
+  const browser = values.browser ?? detected?.browser;
   if (!id) {
-    die(
-      "extension id not found — load the extension first, then pass it explicitly:\n" +
-        "ja install-host --id <id from chrome://extensions, Developer mode>",
+    const predicted = predictId(candidates);
+    if (!predicted) die("no extension copy found — nothing to install the host for");
+    const targets = values.browser
+      ? browserDirs().filter((b) => b.browser === values.browser)
+      : presentBrowsers();
+    installPredicted(tracker, predicted.id, targets);
+    console.log(
+      `installed for predicted id ${predicted.id} (${predicted.path})\n` +
+        "load it in Chrome — if the toggle ever reports the host missing, re-run ja install-host",
     );
+    return;
   }
-  if (hostInstalled(homedir(), id, browser)) {
+  const targetBrowser = browser ?? "chrome";
+  if (hostInstalled(homedir(), id, targetBrowser)) {
     console.log(`native host ready for ${id} — skipped`);
     return;
   }
-  runInstallSh(tracker, id, browser);
+  runInstallSh(tracker, id, targetBrowser);
 }

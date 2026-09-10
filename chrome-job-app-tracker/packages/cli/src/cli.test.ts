@@ -195,7 +195,7 @@ describe("ja", () => {
       expect(help.out).toContain("Load unpacked");
       const r = run("--root", trackerRoot, "extension", "--out", dir);
       expect(r.status).toBe(0);
-      expect(r.out).toContain(`extension ready: ${dir}`);
+      expect(r.out).toContain(dir);
       for (const f of [
         "manifest.json",
         "popup.html",
@@ -332,8 +332,33 @@ describe("ja", () => {
 
       expect(ensureHost("/nonexistent-tracker", [cand], home)).toContain("skipped");
       expect(ensureHost("/nonexistent-tracker", [path.join(home, "missing")], home)).toContain(
-        "not loaded yet",
+        "no extension copy found",
       );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("predicts the id Chrome assigns an unpacked extension", async () => {
+    const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { predictId, unpackedExtensionId } = await import("./install-host-cmd.js");
+
+    // Verified against a real Brave Secure Preferences entry.
+    expect(unpackedExtensionId("/Users/c/Downloads/jat-extension")).toBe(
+      "ehakjaheegcognpdefheaoiamijogjfi",
+    );
+    const a = unpackedExtensionId("/some/path");
+    expect(a).toMatch(/^[a-p]{32}$/);
+    expect(unpackedExtensionId("/some/path")).toBe(a);
+    expect(unpackedExtensionId("/other/path")).not.toBe(a);
+
+    const home = await mkdtemp(path.join(tmpdir(), "jat-predict-"));
+    try {
+      const cand = path.join(home, "ext");
+      await mkdir(cand, { recursive: true });
+      expect(predictId([path.join(home, "missing"), cand])?.path).toBe(cand);
+      expect(predictId([path.join(home, "missing")])).toBeNull();
     } finally {
       await rm(home, { recursive: true, force: true });
     }

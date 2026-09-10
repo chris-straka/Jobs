@@ -89,8 +89,8 @@ export async function extensionCommand(root: string, argv: string[]): Promise<vo
     }
   };
   const readyLine = out
-    ? `extension ready: ${out}\nload it at chrome://extensions (Developer mode → Load unpacked)`
-    : `extension built in place: ${ext}\nReload it at chrome://extensions, then reload posting tabs`;
+    ? `load-ready copy — paste this folder into Chrome:\n${out}\nchrome://extensions, Developer mode → Load unpacked`
+    : `extension built in place — paste this folder into Chrome:\n${ext}\nchrome://extensions, Developer mode → Load unpacked (or Reload, if already loaded)`;
   if (!values.watch) {
     refresh();
     console.log(readyLine);
