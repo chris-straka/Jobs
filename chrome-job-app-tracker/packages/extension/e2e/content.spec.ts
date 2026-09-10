@@ -35,6 +35,9 @@ test("content script extracts the posting from the real bundle", async ({ page }
     };
     const fakeChrome = {
       runtime: {
+        // A live extension context always has an id; its absence means a
+        // stale instance after a reload, which must bail (see below).
+        id: "jat-e2e",
         onMessage: {
           addListener: (fn: MessageListener): void => {
             listeners.push(fn);
@@ -148,6 +151,7 @@ async function bootPill(
       let lastOpen: unknown = null;
       const fakeChrome = {
         runtime: {
+          id: "jat-e2e",
           onMessage: {
             addListener: (fn: MessageListener): void => {
               listeners.push(fn);
@@ -261,6 +265,36 @@ test("apply click on a tracked draft asks about the application", async ({ page 
 
     await page.locator("article button").click();
     await expect(page.locator("#jat-pill")).toContainText("Just applied?");
+  } finally {
+    site.close();
+  }
+});
+
+test("stale instance after extension reload stays silent", async ({ page }) => {
+  const errors: Error[] = [];
+  page.on("pageerror", (e) => errors.push(e));
+  await page.addInitScript(() => {
+    const w = window as unknown as { chrome?: unknown };
+    // Invalidated context: id gone, calls throw. No storage fake — the
+    // script must bail before touching any chrome.* API.
+    w.chrome = {
+      runtime: {
+        id: undefined,
+        onMessage: { addListener: () => {} },
+        sendMessage: (): Promise<unknown> =>
+          Promise.reject(new Error("Extension context invalidated")),
+      },
+    };
+  });
+  const site = await startStatic(pkgDir);
+  try {
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+    // No pill, no uncaught errors: the stale script bails at boot. The
+    // fresh script runs when the tab reloads.
+    await page.waitForTimeout(500);
+    await expect(page.locator("#jat-pill")).toHaveCount(0);
+    expect(errors).toEqual([]);
   } finally {
     site.close();
   }

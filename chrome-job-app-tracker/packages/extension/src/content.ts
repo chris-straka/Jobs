@@ -416,6 +416,11 @@ function armFpConfirmTimer(): void {
 }
 
 void (async () => {
+  // After an extension reload, stale instances in open tabs lose their
+  // context (chrome.runtime.id goes undefined) and every chrome.* call
+  // throws "Extension context invalidated". Bail silently — the fresh
+  // script runs when the tab reloads.
+  if (!chrome.runtime?.id) return;
   if (await denied()) return;
   const posting = readPosting();
   cachedPosting = posting;
