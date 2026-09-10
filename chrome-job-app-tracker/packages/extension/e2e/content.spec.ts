@@ -233,6 +233,39 @@ test("tracked applied pill shows only open and dismiss", async ({ page }) => {
   }
 });
 
+test("apply click on an untracked page keeps the reminder menu", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: false, applied: false });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
+
+    // The posting's own Apply button is not an application: with nothing
+    // tracked there is nothing to mark, so the False positive menu stays.
+    await page.locator("article button").click();
+    await page.waitForTimeout(1200);
+    await expect(page.locator("#jat-pill")).not.toContainText("Just applied?");
+    await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
+  } finally {
+    site.close();
+  }
+});
+
+test("apply click on a tracked draft asks about the application", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: true, applied: false });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await page.locator("article button").click();
+    await expect(page.locator("#jat-pill")).toContainText("Just applied?");
+  } finally {
+    site.close();
+  }
+});
+
 test("open hands the verdict-time posting to the background", async ({ page }) => {
   const site = await startStatic(pkgDir);
   try {

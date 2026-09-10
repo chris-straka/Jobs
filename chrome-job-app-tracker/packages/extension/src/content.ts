@@ -365,9 +365,20 @@ function watchApplyClicks(): void {
       const t = ev.target as Element | null;
       const hit = t?.closest?.("button, a, [role='button'], input[type='submit']");
       const label = (hit?.textContent ?? (hit as HTMLInputElement | null)?.value ?? "").trim();
-      if (hit && label.length > 0 && label.length < 60 && APPLY_TEXT.test(label)) {
-        window.setTimeout(appliedPill, 800);
-      }
+      if (!(hit && label.length > 0 && label.length < 60 && APPLY_TEXT.test(label))) return;
+      // Only ask when there's something to mark. On an untracked page
+      // "Mark applied" would just refuse — and the swap would bury the
+      // False positive button on a page the user never saved.
+      void chrome.runtime
+        .sendMessage({ type: "JAT_PILL_STATE", url: location.href })
+        .then((s: unknown) => {
+          if ((s as { tracked?: boolean } | null)?.tracked === true) {
+            window.setTimeout(appliedPill, 800);
+          }
+        })
+        .catch(() => {
+          // Background unreachable — nothing to mark, stay quiet.
+        });
     },
     true,
   );
