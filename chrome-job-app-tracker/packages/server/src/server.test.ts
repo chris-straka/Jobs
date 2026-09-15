@@ -12,7 +12,7 @@ import {
 import { repoRoot } from "./repo.js";
 import { buildResumeTyp } from "./draft.js";
 import { modelConfigFromEnv, suggest } from "./model.js";
-import { startServer } from "./index.js";
+import { DEFAULT_IDLE_TIMEOUT_MS, idleTimeoutMs, startServer } from "./index.js";
 
 const REAL_ROOT = repoRoot();
 const JD =
@@ -36,6 +36,7 @@ const SECRET_KEYS = [
   "JAT_AGENT_BIN",
   "JAT_AGENT_TIMEOUT_MS",
   "JAT_AGENT_MAX_STEPS",
+  "JAT_IDLE_TIMEOUT_MS",
 ];
 const savedEnv = new Map<string, string | undefined>();
 beforeAll(() => {
@@ -260,6 +261,73 @@ describe("resolve + status", () => {
       server.close();
     }
   }, 120000);
+
+  describe("idle shutdown", () => {
+    it("reads the timeout from the environment", () => {
+      expect(idleTimeoutMs({})).toBe(DEFAULT_IDLE_TIMEOUT_MS);
+      expect(idleTimeoutMs({ JAT_IDLE_TIMEOUT_MS: "60000" })).toBe(60000);
+      expect(idleTimeoutMs({ JAT_IDLE_TIMEOUT_MS: "0" })).toBe(0);
+      expect(idleTimeoutMs({ JAT_IDLE_TIMEOUT_MS: "nope" })).toBe(DEFAULT_IDLE_TIMEOUT_MS);
+      expect(idleTimeoutMs({ JAT_IDLE_TIMEOUT_MS: "-5" })).toBe(DEFAULT_IDLE_TIMEOUT_MS);
+    });
+
+    it("closes an idle server", async () => {
+      const tmp = await mkFixture();
+      let shut = false;
+      const server = startServer({
+        port: 0,
+        root: tmp,
+        idleTimeoutMs: 50,
+        onIdleShutdown: () => {
+          shut = true;
+        },
+      });
+      try {
+        const deadline = Date.now() + 5000;
+        while (!shut && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        expect(shut).toBe(true);
+        expect(server.listening).toBe(false);
+      } finally {
+        if (server.listening) server.close();
+      }
+    });
+
+    it("defers while requests keep arriving", async () => {
+      const tmp = await mkFixture();
+      let shut = false;
+      const server = startServer({
+        port: 0,
+        root: tmp,
+        idleTimeoutMs: 300,
+        onIdleShutdown: () => {
+          shut = true;
+        },
+      });
+      try {
+        const addr = server.address();
+        const port = typeof addr === "object" && addr ? addr.port : 0;
+        const base = `http://127.0.0.1:${port}`;
+        // Touch every ~100ms for ~500ms: the 300ms timer must never fire.
+        for (let i = 0; i < 5; i++) {
+          expect((await fetch(`${base}/health`)).status).toBe(200);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        expect(shut).toBe(false);
+        expect(server.listening).toBe(true);
+        // Then go quiet: shutdown follows.
+        const deadline = Date.now() + 5000;
+        while (!shut && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        expect(shut).toBe(true);
+        expect(server.listening).toBe(false);
+      } finally {
+        if (server.listening) server.close();
+      }
+    });
+  });
 
   it("persists false positives round-trip normalized", async () => {
     const tmp = await mkFixture();

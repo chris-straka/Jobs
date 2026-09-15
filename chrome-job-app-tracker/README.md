@@ -71,13 +71,14 @@ repo (asserting the folder, `job.md`, and CSV row).
 
 ## Configuration
 
-| Env             | Default                      | Meaning                                                                                                                              |
-| --------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`          | `8765`                       | server listen port                                                                                                                   |
-| `REPO_ROOT`     | parent of this checkout      | Jobs repo to write into (tests override)                                                                                             |
-| `MODEL_API_URL` | — (model step disabled)      | OpenAI-compatible base URL (`META_BASE_URL` also accepted)                                                                           |
-| `MODEL_API_KEY` | —                            | bearer key, stays server-side, never in the browser (`META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE`, `META_API_KEY` also accepted) |
-| `MODEL_NAME`    | `muse-spark-1.3-contributor` | model id for `/chat/completions`                                                                                                     |
+| Env                   | Default                      | Meaning                                                                                                                              |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`                | `8765`                       | server listen port                                                                                                                   |
+| `REPO_ROOT`           | parent of this checkout      | Jobs repo to write into (tests override)                                                                                             |
+| `MODEL_API_URL`       | — (model step disabled)      | OpenAI-compatible base URL (`META_BASE_URL` also accepted)                                                                           |
+| `MODEL_API_KEY`       | —                            | bearer key, stays server-side, never in the browser (`META_OPENAI_API_KEY_MUSE_SPARK_ONE_POINT_THREE`, `META_API_KEY` also accepted) |
+| `MODEL_NAME`          | `muse-spark-1.3-contributor` | model id for `/chat/completions`                                                                                                     |
+| `JAT_IDLE_TIMEOUT_MS` | `10800000` (3h)              | idle auto-shutdown in ms (`0` disables; any request resets the timer, captures defer it)                                             |
 
 Put secrets in `chrome-job-app-tracker/.env` (git-ignored, loaded explicitly at
 startup regardless of working directory). `bun run --filter @jat/server probe`

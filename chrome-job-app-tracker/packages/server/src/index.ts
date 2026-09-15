@@ -50,6 +50,28 @@ const progress = new Map<string, { stage: string; at: number }>();
 const runs = new Map<string, AbortController>();
 const PROGRESS_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Idle auto-shutdown so a forgotten server doesn't sit forever. The timer
+ * resets on every request and never fires mid-capture (in-flight requests,
+ * agent runs, and fresh progress stages all defer it). `0` disables it.
+ */
+export const DEFAULT_IDLE_TIMEOUT_MS = 3 * 60 * 60 * 1000;
+
+export function idleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.JAT_IDLE_TIMEOUT_MS;
+  if (raw === undefined) return DEFAULT_IDLE_TIMEOUT_MS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_IDLE_TIMEOUT_MS;
+  return n;
+}
+
+function formatIdle(ms: number): string {
+  if (ms <= 0) return "off";
+  if (ms % 3600000 === 0) return `${ms / 3600000}h`;
+  if (ms % 60000 === 0) return `${ms / 60000}m`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
 function setStage(clientId: string | undefined, stage: string): void {
   if (!clientId) return;
   progress.set(clientId, { stage, at: Date.now() });
@@ -109,9 +131,58 @@ function json(res: http.ServerResponse, status: number, value: unknown): void {
  * verifies the build, and optionally asks the model. Failures surface as
  * 400 (bad payload) or 500 (scaffold failed).
  */
-export function startServer(opts: { port?: number; root?: string } = {}): http.Server {
+export function startServer(
+  opts: {
+    port?: number;
+    root?: string;
+    idleTimeoutMs?: number;
+    onIdleShutdown?: () => void;
+  } = {},
+): http.Server {
   const root = opts.root ?? repoRoot();
+  // The real server runs as `bun src/index.ts` (import.meta.main); library
+  // callers (tests, embedders) opt in by passing idleTimeoutMs explicitly,
+  // so an armed timer can never surprise them.
+  const idleMs = opts.idleTimeoutMs ?? (import.meta.main ? idleTimeoutMs() : 0);
+  let inFlight = 0;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  function armIdle(): void {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = undefined;
+    if (idleMs <= 0) return;
+    idleTimer = setTimeout(onIdle, idleMs);
+  }
+  function onIdle(): void {
+    idleTimer = undefined;
+    // Never die mid-capture: an open request, a registered agent run, or
+    // a fresh progress stage means someone is still working.
+    if (inFlight > 0 || runs.size > 0) {
+      armIdle();
+      return;
+    }
+    const now = Date.now();
+    let fresh = false;
+    for (const [k, v] of progress) {
+      if (now - v.at > PROGRESS_TTL_MS) progress.delete(k);
+      else fresh = true;
+    }
+    if (fresh) {
+      armIdle();
+      return;
+    }
+    console.log(`job capture server idle for ${formatIdle(idleMs)} — shutting down`);
+    try {
+      server.close();
+    } finally {
+      opts.onIdleShutdown?.();
+    }
+  }
   const server = http.createServer((req, res) => {
+    armIdle();
+    inFlight += 1;
+    res.on("close", () => {
+      inFlight -= 1;
+    });
     void (async () => {
       if (req.method === "OPTIONS") {
         json(res, 204, null);
@@ -443,15 +514,18 @@ export function startServer(opts: { port?: number; root?: string } = {}): http.S
   });
   const port = opts.port ?? serverPort();
   server.listen(port, "127.0.0.1");
+  armIdle();
   server.on("listening", () => {
     const addr = server.address();
     const actual = typeof addr === "object" && addr ? addr.port : port;
-    console.log(`job capture server on http://127.0.0.1:${actual} (root ${root})`);
+    console.log(
+      `job capture server on http://127.0.0.1:${actual} (root ${root}) (idle-shutdown ${formatIdle(idleMs)})`,
+    );
   });
   return server;
 }
 
 if (import.meta.main) {
   loadTrackerEnv();
-  startServer();
+  startServer({ onIdleShutdown: () => process.exit(0) });
 }
