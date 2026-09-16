@@ -100,8 +100,11 @@ buttons and hides them again if the host is missing — copy buttons are always
 the fallback. `install.sh uninstall` removes it.
 
 Endpoints: `GET /health`, `POST /api/capture`, `GET /api/resolve?url=…`,
-`POST /api/status` (see `CaptureRequest`/`StatusRequest` in
-`packages/shared/src/schemas.ts`).
+`POST /api/status`, `POST /api/eligibility` (see `CaptureRequest`/`StatusRequest`/
+`EligibilityRequest` in `packages/shared/src/schemas.ts`). The popup's
+Check eligibility button screens the posting against the repo's applicant
+facts (work-auth line, education, invariants) — advisory only, and marking
+ineligible stays a separate click.
 
 ## Fair-use note
 

@@ -156,6 +156,31 @@ export const IneligibleList = z.object({
 });
 export type IneligibleList = z.infer<typeof IneligibleList>;
 
+export const EligibilityVerdict = z.enum(["eligible", "ineligible", "uncertain"]);
+export type EligibilityVerdict = z.infer<typeof EligibilityVerdict>;
+
+/** What the popup sends the local server for one eligibility check. */
+export const EligibilityRequest = z.object({
+  title: z.string().max(200),
+  description: z.string().min(1, "posting text looks empty").max(20000),
+  region: Region,
+  url: z.string().url().optional(),
+});
+export type EligibilityRequest = z.infer<typeof EligibilityRequest>;
+
+/**
+ * Advisory screening verdict, never legal advice: `uncertain` whenever the
+ * posting is silent or ambiguous (e.g. no visa mention), with reasons
+ * saying what to verify. `disabled` when no model is configured.
+ */
+export const EligibilityResponse = z.object({
+  disabled: z.boolean(),
+  verdict: EligibilityVerdict,
+  reasons: z.array(z.string()),
+  raw: z.string().nullable(),
+});
+export type EligibilityResponse = z.infer<typeof EligibilityResponse>;
+
 /**
  * Pill-to-popup handoff: the content script stashes the exact posting the
  * pill verdict used, because the popup's own tab query is not always

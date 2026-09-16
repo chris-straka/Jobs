@@ -398,6 +398,42 @@ describe("resolve + status", () => {
     }
   }, 120000);
 
+  it("screens eligibility, disabled without model credentials", async () => {
+    const tmp = await mkFixture();
+    const server = startServer({ port: 0, root: tmp });
+    try {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      // No model credentials in tests: advisory check stays off.
+      const res = await fetch(`${base}/api/eligibility`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Software Engineer 2027",
+          description: "Students must have a graduation date between December 2026 and June 2027.",
+          region: "uk",
+          url: "https://example.com/jobs/1",
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        disabled: true,
+        verdict: "uncertain",
+        reasons: [],
+        raw: null,
+      });
+      const bad = await fetch(`${base}/api/eligibility`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "x", description: "", region: "uk" }),
+      });
+      expect(bad.status).toBe(400);
+    } finally {
+      server.close();
+    }
+  }, 120000);
+
   it("returns 409 with the folder on duplicate saves", async () => {
     const tmp = await mkFixture();
     const server = startServer({ port: 0, root: tmp });

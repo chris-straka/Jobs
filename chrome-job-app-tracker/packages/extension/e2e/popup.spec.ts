@@ -380,6 +380,103 @@ test("pill-open handoff prefills from stash when the tab URL is hidden", async (
   }
 });
 
+test("eligibility check shows the verdict and offers the rule-out", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    const jobUrl = `${site.url}/e2e/fixture-job.html`;
+    await page.addInitScript(
+      ({ stash }: { stash: { url: string; title: string; description: string; at: number } }) => {
+        const store: Record<string, unknown> = { server: "http://127.0.0.1:9" };
+        const sessionStore: Record<string, unknown> = { pendingPosting: stash };
+        const runtimeMessages: unknown[] = [];
+        const fakeChrome = {
+          storage: {
+            local: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, store[k]]))),
+              set: (obj: Record<string, unknown>): Promise<void> => {
+                Object.assign(store, obj);
+                return Promise.resolve();
+              },
+            },
+            session: {
+              get: (keys: string[]): Promise<Record<string, unknown>> =>
+                Promise.resolve(Object.fromEntries(keys.map((k) => [k, sessionStore[k]]))),
+              set: (): Promise<void> => Promise.resolve(),
+              remove: (keys: string[]): Promise<void> => {
+                for (const k of keys) delete sessionStore[k];
+                return Promise.resolve();
+              },
+            },
+          },
+          tabs: {
+            // No url: programmatic openPopup grants no activeTab.
+            query: (): Promise<{ id: number }[]> => Promise.resolve([{ id: 7 }]),
+          },
+          runtime: {
+            sendNativeMessage: (): Promise<unknown> => Promise.reject(new Error("no such host")),
+            sendMessage: (msg: unknown): Promise<unknown> => {
+              runtimeMessages.push(msg);
+              return Promise.resolve({ ok: true });
+            },
+          },
+        };
+        const w = window as unknown as {
+          chrome?: unknown;
+          fetch?: unknown;
+          __jatRuntimeMessages?: unknown[];
+        };
+        w.chrome = fakeChrome;
+        w.__jatRuntimeMessages = runtimeMessages;
+        w.fetch = async (url: unknown, init?: { method?: string; body?: string }): Promise<unknown> => {
+          if (String(url).includes("/api/eligibility")) {
+            const sent = JSON.parse(String(init?.body ?? "{}")) as { description?: unknown };
+            if (typeof sent.description !== "string" || !sent.description) {
+              throw new Error("eligibility check needs the posting text");
+            }
+            return {
+              ok: true,
+              json: async () => ({
+                disabled: false,
+                verdict: "ineligible",
+                reasons: ["Graduation window Dec 2026–Jun 2027 vs your Aug 2026 graduation"],
+                raw: null,
+              }),
+            };
+          }
+          throw new Error("offline");
+        };
+      },
+      {
+        stash: {
+          url: jobUrl,
+          title: "Graduate Software Engineer",
+          description: JD,
+          at: Date.now(),
+        },
+      },
+    );
+
+    await page.goto(`${site.url}/popup.html`);
+    await expect(page.locator("#capture-form")).toBeVisible();
+    await expect(page.locator("#role")).toHaveValue("Graduate Software Engineer");
+
+    await page.locator("#check-eligibility").click();
+    await expect(page.locator("#elig-result")).toContainText("Ineligible");
+    await expect(page.locator("#elig-result")).toContainText("Aug 2026 graduation");
+    await expect(page.locator("#mark-ineligible")).toBeVisible();
+
+    await page.locator("#mark-ineligible").click();
+    await expect(page.locator("#toast")).toContainText("Marked ineligible");
+    const runtimeMessages = await page.evaluate(
+      () => (window as unknown as { __jatRuntimeMessages?: unknown[] }).__jatRuntimeMessages ?? [],
+    );
+    expect(runtimeMessages).toEqual([{ type: "JAT_INELIGIBLE_MARK", url: jobUrl }]);
+  } finally {
+    site.close();
+  }
+});
+
 test("tracked posting reopens in saved state, not the form", async ({ page }) => {
   const { dir, cleanup } = await mkFixtureRepo();
   const capture = await startCaptureServer(dir);

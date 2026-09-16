@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { DuplicateApplication, addApplication, removeApplication } from "./add.js";
 import { buildResumes, isPageOverflow } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
-import { findByUrl, loadInvariants, readSavedDescription } from "./library.js";
+import { findByUrl, loadApplicantFacts, loadInvariants, readSavedDescription } from "./library.js";
 import {
   mergeFalsePositives,
   parseFalsePositives,
@@ -154,6 +154,24 @@ describe("loadInvariants", () => {
       'invariants:\n  - "No professional work experience (yet)."\n',
     );
     expect(loadInvariants(root)).toEqual(["No professional work experience (yet)."]);
+  });
+});
+
+describe("loadApplicantFacts", () => {
+  it("reads work-auth, education, and invariants against the real content", () => {
+    const facts = loadApplicantFacts(jobsRoot, "uk");
+    expect(facts.workAuth).toContain("YMS");
+    expect(facts.education).toContain(
+      "Master of Science in Computer Science, Georgia Institute of Technology (Aug 2026)",
+    );
+    expect(facts.invariants.some((v) => v.startsWith("No professional work experience"))).toBe(
+      true,
+    );
+  });
+
+  it("tolerates a missing content dir with empty facts", async () => {
+    const root = await mkRoot();
+    expect(loadApplicantFacts(root, "uk")).toEqual({ workAuth: "", education: [], invariants: [] });
   });
 });
 

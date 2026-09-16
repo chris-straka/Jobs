@@ -17,6 +17,50 @@ const ProjectsFile = z.object({
 
 const InvariantsFile = z.object({ invariants: z.array(z.string()).default([]) });
 
+const ProfileFile = z.object({
+  work_auth: z.record(z.string(), z.string().nullable()).default({}),
+});
+
+const EducationFile = z.object({
+  entries: z
+    .array(z.object({ degree: z.string(), school: z.string(), date: z.string() }))
+    .default([]),
+});
+
+export interface ApplicantFacts {
+  /** Work-authorization line for the region, or "" when absent. */
+  workAuth: string;
+  /** One "Degree, School (date)" line per entry. */
+  education: string[];
+  invariants: string[];
+}
+
+/**
+ * Tolerant applicant facts for the eligibility screen: the region's
+ * work-auth line, degree lines, and hard truths. Missing files or bad
+ * shapes mean fewer facts, never a crash.
+ */
+export function loadApplicantFacts(root: string, region: string): ApplicantFacts {
+  let workAuth = "";
+  let education: string[] = [];
+  try {
+    const raw = readFileSync(path.join(root, "content", "profile.yml"), "utf8");
+    const line = ProfileFile.parse(yaml.load(raw)).work_auth[region];
+    if (typeof line === "string" && line.trim()) workAuth = line.trim();
+  } catch {
+    // fewer facts, not a crash
+  }
+  try {
+    const raw = readFileSync(path.join(root, "content", "education.yml"), "utf8");
+    education = EducationFile.parse(yaml.load(raw)).entries.map(
+      (e) => `${e.degree}, ${e.school} (${e.date})`,
+    );
+  } catch {
+    // fewer facts, not a crash
+  }
+  return { workAuth, education, invariants: loadInvariants(root) };
+}
+
 /**
  * Read the hard truths list. Missing file or bad shape means no invariants,
  * never a crash — the tailor simply gets no negative facts.

@@ -1,6 +1,8 @@
 import {
   CaptureRequest,
   CaptureResponse,
+  EligibilityRequest,
+  EligibilityResponse,
   PENDING_POSTING_KEY,
   PENDING_POSTING_TTL_MS,
   PendingPosting,
@@ -733,6 +735,121 @@ async function save(): Promise<void> {
   showResult(folder, buildOk, buildOutput, model, draft, notes);
 }
 
+/**
+ * Advisory visa/graduation-window screen: POSTs the form's posting to the
+ * server, which asks the model against the repo's applicant facts. Never
+ * legal advice — `uncertain` means the posting was silent, with reasons
+ * saying what to verify. Marking ineligible stays a separate click.
+ */
+async function checkEligibility(): Promise<void> {
+  const role = (el("role") as HTMLInputElement).value.trim();
+  const description = (el("description") as HTMLTextAreaElement).value;
+  const region = (el("region") as HTMLSelectElement).value;
+  let tabUrl = prefilledTabUrl;
+  if (!tabUrl) {
+    try {
+      tabUrl = (await currentTab()).url ?? "";
+    } catch {
+      tabUrl = "";
+    }
+  }
+  const parsed = EligibilityRequest.safeParse({
+    title: role,
+    description,
+    region,
+    url: tabUrl || undefined,
+  });
+  if (!parsed.success) {
+    show(
+      `Fix the form:\n${parsed.error.issues.map((i) => `- ${i.path.join(".")}: ${i.message}`).join("\n")}`,
+    );
+    return;
+  }
+  const btn = el("check-eligibility") as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    let res: Response;
+    try {
+      res = await fetch(`${serverBase()}/api/eligibility`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(parsed.data),
+        signal: AbortSignal.timeout(60000),
+      });
+    } catch {
+      show(`Cannot reach ${serverBase()} — is the capture server running?`);
+      return;
+    }
+    const out = EligibilityResponse.safeParse(await res.json().catch(() => null));
+    if (!res.ok || !out.success) {
+      show("Eligibility check failed — see the server log.");
+      return;
+    }
+    renderEligibility(out.data);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Check eligibility";
+  }
+}
+
+/** Verdict line plus grounded reasons; the rule-out button follows. */
+function renderEligibility(out: EligibilityResponse): void {
+  const box = el("elig-result");
+  const mark = el("mark-ineligible") as HTMLButtonElement;
+  if (out.disabled) {
+    box.textContent =
+      "Eligibility check needs a model — set MODEL_API_URL and MODEL_API_KEY " +
+      "in chrome-job-app-tracker/.env, then restart the server.";
+    box.hidden = false;
+    mark.hidden = true;
+    return;
+  }
+  const head =
+    out.verdict === "eligible"
+      ? "Eligible ✓ — nothing in the posting rules you out."
+      : out.verdict === "ineligible"
+        ? "Ineligible"
+        : "Uncertain — the posting doesn't settle it";
+  const detail =
+    out.reasons.length > 0
+      ? `\n${out.reasons.map((r) => `- ${r}`).join("\n")}`
+      : out.raw
+        ? `\n${shortReason(out.raw)}`
+        : "";
+  box.textContent = head + detail;
+  box.hidden = false;
+  mark.hidden = out.verdict === "eligible";
+}
+
+/** Rule-out click after a check: hands the tab URL to the background. */
+async function markIneligibleFromPopup(): Promise<void> {
+  let tabUrl = prefilledTabUrl;
+  if (!tabUrl) {
+    try {
+      tabUrl = (await currentTab()).url ?? "";
+    } catch {
+      show("No tab URL — nothing to mark.");
+      return;
+    }
+  }
+  if (!tabUrl) {
+    show("No tab URL — nothing to mark.");
+    return;
+  }
+  let r: unknown;
+  try {
+    r = await chrome.runtime.sendMessage({ type: "JAT_INELIGIBLE_MARK", url: tabUrl });
+  } catch {
+    showToast("Couldn't reach the background worker — reload the extension.");
+    return;
+  }
+  const ok = (r as { ok?: boolean } | null)?.ok === true;
+  showToast(
+    ok ? "Marked ineligible ✓ — see the Manage page." : "Already saved — can't rule out a tracked posting.",
+  );
+}
+
 async function markApplied(): Promise<void> {
   let tabUrl = prefilledTabUrl;
   if (!tabUrl) {
@@ -777,6 +894,8 @@ document.addEventListener("DOMContentLoaded", () => {
     (el("company") as HTMLInputElement).focus();
   });
   el("save").addEventListener("click", () => void save());
+  el("check-eligibility").addEventListener("click", () => void checkEligibility());
+  el("mark-ineligible").addEventListener("click", () => void markIneligibleFromPopup());
   el("mark-applied").addEventListener("click", () => void markApplied());
   el("copy-srv").addEventListener("click", () => void (serverOnline ? copyStop() : copyStart()));
   el("health").addEventListener("click", () => {

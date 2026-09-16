@@ -6,6 +6,7 @@ import {
   CancelResponse,
   CaptureRequest,
   CaptureResponse,
+  EligibilityRequest,
   HealthResponse,
   OpenRequest,
   OpenResponse,
@@ -23,6 +24,7 @@ import {
   buildResumes,
   findByUrl,
   isPageOverflow,
+  loadApplicantFacts,
   loadInvariants,
   loadLibrary,
   openApplicationFolder,
@@ -37,6 +39,7 @@ import {
   writeFalsePositives,
   writeIneligible,
 } from "@jat/core";
+import { checkEligibility } from "./eligibility.js";
 import type { BulletRef, ModelSuggestion } from "@jat/shared";
 import { agentEnabled, runAgentTailor } from "./agent.js";
 import { autoDraftEnabled, buildResumeTyp, dropOneBullet, TIGHT_KNOBS } from "./draft.js";
@@ -280,6 +283,37 @@ export function startServer(
       }
       if (req.method === "GET" && req.url === "/api/ineligible") {
         json(res, 200, readIneligible(root));
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/eligibility") {
+        let body: unknown;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          json(res, 400, { error: "invalid JSON body" });
+          return;
+        }
+        const parsed = EligibilityRequest.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: "invalid eligibility request" });
+          return;
+        }
+        try {
+          json(
+            res,
+            200,
+            await checkEligibility(
+              {
+                title: parsed.data.title,
+                description: parsed.data.description,
+                region: parsed.data.region,
+              },
+              loadApplicantFacts(root, parsed.data.region),
+            ),
+          );
+        } catch (err) {
+          json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+        }
         return;
       }
       if (req.method === "POST" && req.url === "/api/ineligible") {
