@@ -13,6 +13,12 @@ import {
   readFalsePositives,
   writeFalsePositives,
 } from "./ignore.js";
+import {
+  mergeIneligible,
+  parseIneligible,
+  readIneligible,
+  writeIneligible,
+} from "./ineligible.js";
 import { openApplicationFolder } from "./open.js";
 import { listApplications, readApplicationStatus, setApplicationStatus } from "./status.js";
 
@@ -203,6 +209,39 @@ describe("false positives", () => {
     });
     expect(parseFalsePositives({ falsePositives: "nope" })).toBeNull();
     expect(parseFalsePositives({ nope: [] })).toBeNull();
+  });
+});
+
+describe("ineligible", () => {
+  it("round-trips canonicalized and merges", async () => {
+    const root = await mkRoot();
+    expect(readIneligible(root)).toEqual({ ineligible: [] });
+    writeIneligible(root, {
+      ineligible: [
+        "https://www.example.com/jobs/1/?utm_source=x#apply",
+        "https://example.com/jobs/1",
+        "not a url",
+      ],
+    });
+    expect(readIneligible(root)).toEqual({ ineligible: ["https://example.com/jobs/1"] });
+    const merged = mergeIneligible(readIneligible(root), {
+      ineligible: ["https://example.com/jobs/2"],
+    });
+    expect(merged).toEqual({
+      ineligible: ["https://example.com/jobs/1", "https://example.com/jobs/2"],
+    });
+  });
+
+  it("reads a corrupt file as empty and rejects garbage bodies", async () => {
+    const root = await mkRoot();
+    await mkdir(path.join(root, ".jat"), { recursive: true });
+    await writeFile(path.join(root, ".jat", "ineligible.json"), "not json{");
+    expect(readIneligible(root)).toEqual({ ineligible: [] });
+    expect(parseIneligible({ ineligible: ["https://example.com/jobs/1"] })).toEqual({
+      ineligible: ["https://example.com/jobs/1"],
+    });
+    expect(parseIneligible({ ineligible: "nope" })).toBeNull();
+    expect(parseIneligible({ nope: [] })).toBeNull();
   });
 });
 

@@ -243,7 +243,7 @@ function showPill(html: string, actions: Record<string, () => void>): void {
   document.body.appendChild(pill);
 }
 
-type PillMode = "untracked" | "draft" | "applied";
+type PillMode = "untracked" | "draft" | "applied" | "ineligible";
 
 function markAppliedAction(): void {
   void chrome.runtime
@@ -258,7 +258,8 @@ function markAppliedAction(): void {
 
 /**
  * Tracked but not yet applied: False positive gives way to Mark applied.
- * Tracked and applied: neither — just Open and dismiss.
+ * Tracked and applied: neither — just Open and dismiss. Ruled-out
+ * postings show Ineligible with a way back instead of the save reminder.
  */
 function reminderPill(mode: PillMode): void {
   const buttons =
@@ -266,10 +267,14 @@ function reminderPill(mode: PillMode): void {
     (mode === "draft"
       ? `<button data-act="mark">Mark applied ✓</button>`
       : mode === "untracked"
-        ? `<button data-act="no">False positive</button>`
-        : "") +
+        ? `<button data-act="inelig">Ineligible</button>` +
+          `<button data-act="no">False positive</button>`
+        : mode === "ineligible"
+          ? `<button data-act="undo-inelig">Undo</button>`
+          : "") +
     `<button data-act="x">✕</button>`;
-  showPill(`<div style="display:flex;gap:8px">${buttons}</div>`, {
+  const label = mode === "ineligible" ? `<span>Ineligible ✓</span>` : "";
+  showPill(`<div style="display:flex;gap:8px;align-items:center">${label}${buttons}</div>`, {
     // The background routes Open (tracked folder vs popup form) because
     // content scripts can open neither directly. The posting rides along:
     // the popup cannot always read the tab itself, so the pill hands over
@@ -311,7 +316,7 @@ function reminderPill(mode: PillMode): void {
                   void chrome.runtime.sendMessage({ type: "JAT_OPEN_DASHBOARD" }).catch(() => {});
                 },
                 undo: () => {
-                  clearFpConfirmTimer();
+                  clearConfirmTimer();
                   void chrome.runtime
                     .sendMessage({
                       type: "JAT_FP_UNREPORT",
@@ -326,16 +331,65 @@ function reminderPill(mode: PillMode): void {
                     });
                 },
                 x: () => {
-                  clearFpConfirmTimer();
+                  clearConfirmTimer();
                   removePill();
                 },
               },
             );
-            armFpConfirmTimer();
+            armConfirmTimer();
           } else {
             showPill(`<div>Already saved ✓ — can't mute a tracked posting.</div>`, {
               x: removePill,
             });
+          }
+        });
+    },
+    inelig: () => {
+      void chrome.runtime
+        .sendMessage({ type: "JAT_INELIGIBLE_MARK", url: location.href })
+        .then((r: unknown) => {
+          // A tracked posting can never be ineligible: the mark is
+          // refused, and the pill says what it is instead of vanishing.
+          if ((r as { ok?: boolean } | null)?.ok === true) {
+            pillMode = "ineligible";
+            showPill(
+              `<div style="display:flex;gap:8px;align-items:center">` +
+                `<span>Marked ineligible ✓</span>` +
+                `<button data-act="undo">Undo</button>` +
+                `<button data-act="x">✕</button></div>`,
+              {
+                undo: () => {
+                  clearConfirmTimer();
+                  void chrome.runtime
+                    .sendMessage({ type: "JAT_INELIGIBLE_UNMARK", url: location.href })
+                    .then((u: unknown) => {
+                      if ((u as { ok?: boolean } | null)?.ok === true) {
+                        pillMode = "untracked";
+                        reminderPill(pillMode);
+                      }
+                    });
+                },
+                x: () => {
+                  clearConfirmTimer();
+                  removePill();
+                },
+              },
+            );
+            armConfirmTimer();
+          } else {
+            showPill(`<div>Already saved ✓ — can't rule out a tracked posting.</div>`, {
+              x: removePill,
+            });
+          }
+        });
+    },
+    "undo-inelig": () => {
+      void chrome.runtime
+        .sendMessage({ type: "JAT_INELIGIBLE_UNMARK", url: location.href })
+        .then((u: unknown) => {
+          if ((u as { ok?: boolean } | null)?.ok === true) {
+            pillMode = "untracked";
+            reminderPill(pillMode);
           }
         });
     },
@@ -413,21 +467,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 let pillMode: PillMode = "untracked";
 
 /**
- * Mute-confirm auto-dismiss. The toast is a receipt, not a workspace: it
+ * Confirm-toast auto-dismiss. The toast is a receipt, not a workspace: it
  * clears itself after a few seconds, long enough to hit Undo. Any manual
  * dismissal clears the timer first so it can't remove a later pill.
  */
-const FP_CONFIRM_MS = 5000;
-let fpConfirmTimer: number | undefined;
+const CONFIRM_MS = 5000;
+let confirmTimer: number | undefined;
 
-function clearFpConfirmTimer(): void {
-  window.clearTimeout(fpConfirmTimer);
-  fpConfirmTimer = undefined;
+function clearConfirmTimer(): void {
+  window.clearTimeout(confirmTimer);
+  confirmTimer = undefined;
 }
 
-function armFpConfirmTimer(): void {
-  clearFpConfirmTimer();
-  fpConfirmTimer = window.setTimeout(removePill, FP_CONFIRM_MS);
+function armConfirmTimer(): void {
+  clearConfirmTimer();
+  confirmTimer = window.setTimeout(removePill, CONFIRM_MS);
 }
 
 void (async () => {
@@ -449,8 +503,9 @@ void (async () => {
       const s = (await chrome.runtime.sendMessage({
         type: "JAT_PILL_STATE",
         url: location.href,
-      })) as { tracked?: boolean; applied?: boolean } | null;
+      })) as { tracked?: boolean; applied?: boolean; ineligible?: boolean } | null;
       if (s?.tracked) pillMode = s.applied ? "applied" : "draft";
+      else if (s?.ineligible) pillMode = "ineligible";
     } catch {
       // background unreachable (tests, restricted pages) — plain pill
     }

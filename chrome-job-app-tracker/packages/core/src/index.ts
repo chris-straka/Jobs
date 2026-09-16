@@ -6,3 +6,4 @@ export * from "./status.js";
 export * from "./library.js";
 export * from "./open.js";
 export * from "./ignore.js";
+export * from "./ineligible.js";

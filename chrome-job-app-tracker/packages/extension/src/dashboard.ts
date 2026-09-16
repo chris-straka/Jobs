@@ -1,7 +1,9 @@
 import {
   FalsePositives,
+  IneligibleList,
   normalizeFalsePositiveEntries,
   normalizeFalsePositiveEntry,
+  normalizeIneligibleUrls,
 } from "@jat/shared";
 
 /** Retired split keys: read for migration, never written. */
@@ -134,13 +136,97 @@ async function migrateStorage(): Promise<void> {
   await setList(await getList());
 }
 
+const INELIGIBLE_KEY = "ineligibleUrls";
+
+/** Storage is the live store: only canonical http(s) URLs survive. */
+async function getIneligible(): Promise<string[]> {
+  const stored = await chrome.storage.local.get([INELIGIBLE_KEY]);
+  const raw = stored[INELIGIBLE_KEY];
+  return Array.isArray(raw) ? normalizeIneligibleUrls(raw) : [];
+}
+
+async function setIneligible(urls: string[]): Promise<void> {
+  await chrome.storage.local.set({ [INELIGIBLE_KEY]: normalizeIneligibleUrls(urls) });
+}
+
+/** Server payload, strict shape — anything else is ignored. */
+function parseIneligiblePayload(body: unknown): string[] | null {
+  const strict = IneligibleList.safeParse(body);
+  if (!strict.success) return null;
+  return normalizeIneligibleUrls(strict.data.ineligible);
+}
+
+/** Push the list to the on-disk file. Silent offline. */
+async function persistIneligible(): Promise<void> {
+  try {
+    const base = await serverBase();
+    await fetch(`${base}/api/ineligible`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ineligible: await getIneligible() }),
+    });
+  } catch {
+    // Offline — storage is the live store.
+  }
+}
+
+/** Union the on-disk list into storage once on load, then push back. */
+async function healIneligibleFromFile(): Promise<void> {
+  try {
+    const base = await serverBase();
+    const res = await fetch(`${base}/api/ineligible`);
+    const pulled = parseIneligiblePayload(await res.json());
+    if (!pulled) return;
+    const current = await getIneligible();
+    const merged = [...new Set([...current, ...pulled])].sort();
+    if (JSON.stringify(current) !== JSON.stringify(merged)) {
+      await setIneligible(merged);
+    }
+    await persistIneligible();
+  } catch {
+    // Offline — storage is the live store.
+  }
+}
+
+async function renderIneligibleSection(): Promise<void> {
+  const urls = await getIneligible();
+  el("in-count").textContent = String(urls.length);
+  const ul = el("in-list");
+  ul.replaceChildren();
+  for (const url of urls) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = url;
+    name.title = url;
+    const rm = document.createElement("button");
+    rm.textContent = "Remove";
+    rm.type = "button";
+    rm.addEventListener("click", () => {
+      void getIneligible()
+        .then((all) => setIneligible(all.filter((u) => u !== url)))
+        .then(() => persistIneligible())
+        .then(() => void render());
+    });
+    li.append(name, rm);
+    ul.appendChild(li);
+  }
+  el("in-empty").hidden = urls.length > 0;
+}
+
 /** Storage is the live store: renders read it, never the file. */
 async function render(): Promise<void> {
   await renderSection();
+  await renderIneligibleSection();
 }
 
 function showError(text: string): void {
   const err = el("form-error");
+  err.textContent = text;
+  err.hidden = !text;
+}
+
+function showIneligibleError(text: string): void {
+  const err = el("in-error");
   err.textContent = text;
   err.hidden = !text;
 }
@@ -180,16 +266,40 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(() => persist())
       .then(() => render());
   });
+  el("in-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const urlInput = el("in-url") as HTMLInputElement;
+    const raw = urlInput.value;
+    if (!raw.trim()) {
+      showIneligibleError("Paste a posting URL, e.g. https://example.com/jobs/1.");
+      return;
+    }
+    const canonical = normalizeIneligibleUrls([raw]);
+    if (canonical.length === 0) {
+      showIneligibleError("Couldn't read a posting URL from that.");
+      return;
+    }
+    showIneligibleError("");
+    // Clear synchronously: the async chain below must never wipe a later fill.
+    urlInput.value = "";
+    void getIneligible()
+      .then((urls) => setIneligible([...new Set([...urls, ...canonical])].sort()))
+      .then(() => persistIneligible())
+      .then(() => render());
+  });
   // Heal once: fresh profiles and hand-edited files converge here, and
   // every render after this reads storage only.
   void migrateStorage()
     .then(() => healFromFile())
+    .then(() => healIneligibleFromFile())
     .then(() => render());
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (
         area === "local" &&
-        ("falsePositives" in changes || LEGACY_KEYS.some((k) => k in changes))
+        ("falsePositives" in changes ||
+          INELIGIBLE_KEY in changes ||
+          LEGACY_KEYS.some((k) => k in changes))
       ) {
         void render();
       }

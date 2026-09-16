@@ -322,6 +322,26 @@ test("open hands the verdict-time posting to the background", async ({ page }) =
   }
 });
 
+test("ineligible button marks the posting and shows its state", async ({ page }) => {
+  const site = await startStatic(pkgDir);
+  try {
+    await bootPill(page, { tracked: false, applied: false });
+    await page.goto(`${site.url}/e2e/fixture-job.html`);
+    await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+
+    await expect(page.locator("#jat-pill button[data-act='inelig']")).toHaveText("Ineligible");
+    await page.locator("#jat-pill button[data-act='inelig']").click();
+    await expect(page.locator("#jat-pill")).toContainText("Marked ineligible");
+    expect(await messages(page)).toContain("JAT_INELIGIBLE_MARK");
+    // Undo puts the reminder menu back.
+    await page.locator("#jat-pill button[data-act='undo']").click();
+    await expect(page.locator("#jat-pill button[data-act='inelig']")).toHaveText("Ineligible");
+    expect(await messages(page)).toContain("JAT_INELIGIBLE_UNMARK");
+  } finally {
+    site.close();
+  }
+});
+
 test("false-positive on a tracked posting is refused, not recorded", async ({ page }) => {
   const site = await startStatic(pkgDir);
   try {

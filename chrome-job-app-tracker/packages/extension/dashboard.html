@@ -64,21 +64,32 @@
       .sec-head h2 {
         white-space: nowrap;
       }
-      #add-form {
+      #add-form,
+      #in-form {
         display: grid;
-        grid-template-columns: 1fr 1fr auto;
         gap: 8px;
         margin-bottom: 0;
       }
-      #add-form button {
+      #add-form {
+        grid-template-columns: 1fr 1fr auto;
+      }
+      #in-form {
+        grid-template-columns: 1fr auto;
+      }
+      #add-form button,
+      #in-form button {
         white-space: nowrap;
+      }
+      section + section {
+        margin-top: 28px;
       }
       @media (max-width: 560px) {
         .sec-head {
           flex-direction: column;
           align-items: stretch;
         }
-        #add-form {
+        #add-form,
+        #in-form {
           grid-template-columns: 1fr;
         }
       }
@@ -162,7 +173,8 @@
         color: var(--muted);
         font-size: 13px;
       }
-      #form-error {
+      #form-error,
+      #in-error {
         color: var(--bad);
         font-size: 12px;
         margin: -8px 0 12px;
@@ -190,6 +202,18 @@
       <p id="form-error" hidden></p>
       <ul id="fp-list"></ul>
       <p id="fp-empty" class="empty-note" hidden>No false positives yet.</p>
+    </section>
+    <section>
+      <div class="sec-head">
+        <h2>Ineligible (<span id="in-count">0</span>)</h2>
+        <form id="in-form">
+          <input id="in-url" placeholder="Posting URL" autocomplete="off" spellcheck="false" />
+          <button class="primary" type="submit">Add</button>
+        </form>
+      </div>
+      <p id="in-error" hidden></p>
+      <ul id="in-list"></ul>
+      <p id="in-empty" class="empty-note" hidden>No ineligible postings yet.</p>
     </section>
     <script src="dist/dashboard.js"></script>
   </body>

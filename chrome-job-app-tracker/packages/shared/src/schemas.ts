@@ -147,6 +147,16 @@ export const FalsePositives = z.object({
 export type FalsePositives = z.infer<typeof FalsePositives>;
 
 /**
+ * Postings the user ruled out (e.g. graduation-window mismatch): canonical
+ * posting URLs. The pill shows an Ineligible state on these instead of the
+ * save reminder; the tracker stays for real applications only.
+ */
+export const IneligibleList = z.object({
+  ineligible: z.array(z.string()),
+});
+export type IneligibleList = z.infer<typeof IneligibleList>;
+
+/**
  * Pill-to-popup handoff: the content script stashes the exact posting the
  * pill verdict used, because the popup's own tab query is not always
  * permitted to see the tab (programmatic openPopup grants no activeTab).

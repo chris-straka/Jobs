@@ -14,7 +14,10 @@ Two parts, one thin and one doing the work:
 
 - `packages/extension/` — Manifest V3 extension. A content script extracts the
   posting text from the visible tab, shows a "Save this job?" pill on likely
-  postings (with a "Not a posting" button feeding a host-or-path ignore list — `host/dashboard` mutes only that subtree), and
+  postings (with "Not a posting" feeding a host-or-path ignore list —
+  `host/dashboard` mutes only that subtree — and an "Ineligible" button for
+  postings you rule out, listed on the Manage page and synced to
+  `.jat/ineligible.json`), and
   watches apply-button clicks to offer one-click "Mark applied". A background
   worker relays those to the server. The popup (company, role, track, region,
   server URL, editable description) validates with Zod and POSTs to the local

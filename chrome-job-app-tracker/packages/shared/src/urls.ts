@@ -111,6 +111,30 @@ function splitFalsePositiveEntry(entry: string): { host: string; path: string | 
 }
 
 /**
+ * Canonicalized, deduped, sorted posting URLs for the ineligible list.
+ * Only http(s) URLs survive; tracking params, fragments, `www.`, and
+ * trailing slashes collapse via {@link canonicalPostingUrl} so one posting
+ * never forks into two entries. Garbage drops out.
+ */
+export function normalizeIneligibleUrls(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  for (const raw of list) {
+    if (typeof raw !== "string") continue;
+    const t = raw.trim();
+    let url: URL;
+    try {
+      url = new URL(t);
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+    out.push(canonicalPostingUrl(t));
+  }
+  return [...new Set(out)].sort();
+}
+
+/**
  * Whether a URL falls under any entry. Bare-host entries cover the whole
  * host; path entries cover that path and its children only. Pure entry
  * matching — built-in denials (aggregators) live with the caller.

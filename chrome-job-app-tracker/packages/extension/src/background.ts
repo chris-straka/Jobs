@@ -2,8 +2,11 @@ import {
   PENDING_POSTING_KEY,
   PendingPosting,
   FalsePositives,
+  IneligibleList,
+  canonicalPostingUrl,
   normalizeFalsePositiveEntries,
   normalizeFalsePositiveEntry,
+  normalizeIneligibleUrls,
   OpenResponse,
   ResolveResponse,
   StatusResponse,
@@ -176,22 +179,128 @@ async function unreportFalsePositive(host: string, rawEntry?: unknown, url?: str
   return { ok: true };
 }
 
+const INELIGIBLE_KEY = "ineligibleUrls";
+
+/** Storage is the live store; only canonical http(s) URLs survive. */
+async function readIneligible(): Promise<string[]> {
+  try {
+    const stored = await chrome.storage.local.get([INELIGIBLE_KEY]);
+    const raw = stored[INELIGIBLE_KEY];
+    return Array.isArray(raw) ? normalizeIneligibleUrls(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeIneligible(urls: string[]): Promise<void> {
+  await chrome.storage.local.set({ [INELIGIBLE_KEY]: normalizeIneligibleUrls(urls) });
+}
+
+/** Server payload, strict shape — anything else is ignored. */
+function parseIneligiblePayload(body: unknown): string[] | null {
+  const strict = IneligibleList.safeParse(body);
+  if (!strict.success) return null;
+  return normalizeIneligibleUrls(strict.data.ineligible);
+}
+
+/** Push storage to disk after a local mutation. Silent offline. */
+async function pushIneligible(): Promise<void> {
+  try {
+    const base = await serverBase();
+    await fetch(`${base}/api/ineligible`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ineligible: await readIneligible() }),
+    });
+  } catch {
+    // Offline — the file heals on the next online write.
+  }
+}
+
+/** Pull the on-disk list into storage (union). Silent offline. */
+async function pullIneligible(): Promise<void> {
+  try {
+    const base = await serverBase();
+    const stored = await readIneligible();
+    const res = await fetch(`${base}/api/ineligible`);
+    const pulled = parseIneligiblePayload(await res.json());
+    if (!pulled) return;
+    const merged = [...new Set([...stored, ...pulled])].sort();
+    await writeIneligible(merged);
+    await fetch(`${base}/api/ineligible`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ineligible: merged }),
+    });
+  } catch {
+    // Offline — storage is the live store; nothing to converge.
+  }
+}
+
+/**
+ * A ruled-out posting is never a tracked one: marking refuses saved URLs
+ * so an application can never be buried under Ineligible.
+ */
+async function markIneligible(url: string): Promise<FpResult> {
+  const canonical = canonicalPostingUrl(url);
+  let parsed: URL;
+  try {
+    parsed = new URL(canonical);
+  } catch {
+    return { ok: false, reason: "unreadable" };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, reason: "unreadable" };
+  }
+  const base = await serverBase();
+  try {
+    const res = await fetch(`${base}/api/resolve?url=${encodeURIComponent(url)}`);
+    const tracked = ResolveResponse.safeParse(await res.json());
+    if (tracked.success && tracked.data.folder) return { ok: false, reason: "tracked" };
+  } catch {
+    // Server offline — nothing tracked that we know of; record the mark.
+  }
+  const stored = await readIneligible();
+  if (!stored.includes(canonical)) {
+    await writeIneligible([...stored, canonical]);
+  }
+  await pushIneligible();
+  return { ok: true };
+}
+
+/** Pill Undo: unmark the posting and push the on-disk list. */
+async function unmarkIneligible(url: string): Promise<FpResult> {
+  const canonical = canonicalPostingUrl(url);
+  const stored = await readIneligible();
+  await writeIneligible(stored.filter((u) => u !== canonical));
+  await pushIneligible();
+  return { ok: true };
+}
+
+/** Whether this URL sits on the ineligible list (canonical compare). */
+async function isIneligible(url: string): Promise<boolean> {
+  const stored = await readIneligible();
+  return stored.includes(canonicalPostingUrl(url));
+}
+
 interface PillState {
   tracked: boolean;
   applied: boolean;
+  ineligible: boolean;
 }
 
 /** Content-script pill: which buttons make sense for this URL. */
 async function pillState(url: string): Promise<PillState> {
-  const untracked = { tracked: false, applied: false };
+  const untracked = { tracked: false, applied: false, ineligible: await isIneligible(url) };
   const base = await serverBase();
   try {
     const res = await fetch(`${base}/api/resolve?url=${encodeURIComponent(url)}`);
     const parsed = ResolveResponse.safeParse(await res.json());
     if (!parsed.success || !parsed.data.folder) return untracked;
     // Unknown status keeps the Mark applied path (the click re-resolves).
+    // Tracked always wins: a saved application shows its real state.
     const applied = !!parsed.data.status && parsed.data.status !== "draft";
-    return { tracked: true, applied };
+    return { tracked: true, applied, ineligible: false };
   } catch {
     // Server offline — plain pill; Open falls back to the popup.
     return untracked;
@@ -278,9 +387,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "JAT_PILL_STATE") {
-    // Converge the on-disk mute list into storage (unawaited): the next
+    // Converge the on-disk lists into storage (unawaited): the next
     // page's denied() check then sees file entries too.
     void pullIgnoreLists();
+    void pullIneligible();
     void pillState(String(msg.url ?? "")).then(sendResponse);
     return true;
   }
@@ -302,6 +412,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       msg.entry,
       typeof msg.url === "string" ? msg.url : undefined,
     ).then(sendResponse);
+    return true;
+  }
+  if (msg?.type === "JAT_INELIGIBLE_MARK") {
+    void markIneligible(String(msg.url ?? "")).then(sendResponse);
+    return true;
+  }
+  if (msg?.type === "JAT_INELIGIBLE_UNMARK") {
+    void unmarkIneligible(String(msg.url ?? "")).then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_OPEN_DASHBOARD") {

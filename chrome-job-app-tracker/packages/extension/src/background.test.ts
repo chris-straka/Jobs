@@ -112,6 +112,7 @@ describe("JAT_PILL_STATE", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: false,
       applied: false,
+      ineligible: false,
     });
   });
 
@@ -120,6 +121,7 @@ describe("JAT_PILL_STATE", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: true,
       applied: false,
+      ineligible: false,
     });
   });
 
@@ -128,6 +130,7 @@ describe("JAT_PILL_STATE", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: true,
       applied: true,
+      ineligible: false,
     });
   });
 
@@ -136,6 +139,7 @@ describe("JAT_PILL_STATE", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: true,
       applied: false,
+      ineligible: false,
     });
   });
 
@@ -144,6 +148,7 @@ describe("JAT_PILL_STATE", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: false,
       applied: false,
+      ineligible: false,
     });
   });
 });
@@ -217,6 +222,7 @@ describe("JAT_PILL_STATE compatibility", () => {
     expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
       tracked: true,
       applied: false,
+      ineligible: false,
     });
   });
 });
@@ -309,6 +315,76 @@ describe("JAT_FP_UNREPORT", () => {
       falsePositives?: string[];
     };
     expect(body.falsePositives).toEqual([]);
+  });
+});
+
+describe("JAT_INELIGIBLE_MARK", () => {
+  it("stores the canonical URL for untracked postings", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    expect(
+      await send("JAT_INELIGIBLE_MARK", {
+        url: "https://www.example.com/jobs/1/?utm_source=x#apply",
+      }),
+    ).toEqual({ ok: true });
+    expect(localStore["ineligibleUrls"]).toEqual(["https://example.com/jobs/1"]);
+  });
+
+  it("refuses tracked URLs — a saved posting is never ineligible", async () => {
+    routes.resolve = { ok: true, body: resolveBody("applications/2026-09-09_acme_x", "draft") };
+    expect(
+      await send("JAT_INELIGIBLE_MARK", { url: "https://example.com/jobs/1" }),
+    ).toEqual({ ok: false, reason: "tracked" });
+    expect(localStore["ineligibleUrls"]).toBeUndefined();
+  });
+
+  it("refuses unreadable URLs", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    expect(await send("JAT_INELIGIBLE_MARK", { url: "not a url" })).toEqual({
+      ok: false,
+      reason: "unreadable",
+    });
+    expect(localStore["ineligibleUrls"]).toBeUndefined();
+  });
+});
+
+describe("JAT_INELIGIBLE_UNMARK", () => {
+  it("removes the canonical URL and pushes storage to disk", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    await send("JAT_INELIGIBLE_MARK", { url: "https://example.com/jobs/1?utm_source=x" });
+    expect(localStore["ineligibleUrls"]).toEqual(["https://example.com/jobs/1"]);
+    expect(await send("JAT_INELIGIBLE_UNMARK", { url: "https://example.com/jobs/1" })).toEqual({
+      ok: true,
+    });
+    expect(localStore["ineligibleUrls"]).toEqual([]);
+    const pushes = fetchCalls.filter(
+      (c) => c.url.includes("/api/ineligible") && (c.init?.method ?? "GET") === "POST",
+    );
+    const last = pushes[pushes.length - 1];
+    expect(last).toBeDefined();
+    const body = JSON.parse((last?.init as { body?: string } | undefined)?.body ?? "{}") as {
+      ineligible?: string[];
+    };
+    expect(body.ineligible).toEqual([]);
+  });
+});
+
+describe("JAT_PILL_STATE ineligible", () => {
+  it("flags listed URLs despite tracking-param noise", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    localStore["ineligibleUrls"] = ["https://example.com/jobs/1"];
+    expect(
+      await send("JAT_PILL_STATE", { url: "https://www.example.com/jobs/1/?utm_source=x" }),
+    ).toEqual({ tracked: false, applied: false, ineligible: true });
+  });
+
+  it("prefers tracked state over ineligible", async () => {
+    routes.resolve = { ok: true, body: resolveBody("applications/2026-09-09_acme_x", "draft") };
+    localStore["ineligibleUrls"] = ["https://example.com/jobs/1"];
+    expect(await send("JAT_PILL_STATE", { url: "https://example.com/jobs/1" })).toEqual({
+      tracked: true,
+      applied: false,
+      ineligible: false,
+    });
   });
 });
 

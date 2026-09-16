@@ -7,6 +7,7 @@ import {
   isDeniedUrl,
   normalizeFalsePositiveEntries,
   normalizeFalsePositiveEntry,
+  normalizeIneligibleUrls,
 } from "./urls.js";
 
 describe("guessCompany", () => {
@@ -110,6 +111,25 @@ describe("isDeniedUrl", () => {
       true,
     );
     expect(isDeniedUrl("not a url", list)).toBe(false);
+  });
+});
+
+describe("normalizeIneligibleUrls", () => {
+  it("canonicalizes, dedupes, and sorts; one posting is one entry", () => {
+    expect(
+      normalizeIneligibleUrls([
+        "https://www.example.com/jobs/1/?utm_source=x#apply",
+        "https://example.com/jobs/1",
+        "https://example.com/jobs/2",
+      ]),
+    ).toEqual(["https://example.com/jobs/1", "https://example.com/jobs/2"]);
+  });
+
+  it("drops non-urls and non-http schemes", () => {
+    expect(
+      normalizeIneligibleUrls(["not a url", "ftp://example.com/x", "", 42, "https://ok.com/a/"]),
+    ).toEqual(["https://ok.com/a"]);
+    expect(normalizeIneligibleUrls("nope")).toEqual([]);
   });
 });
 

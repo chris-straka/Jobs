@@ -26,13 +26,16 @@ import {
   loadInvariants,
   loadLibrary,
   openApplicationFolder,
+  parseIneligible,
   readApplicationStatus,
+  readIneligible,
   parseFalsePositives,
   readFalsePositives,
   readSavedDescription,
   removeApplication,
   setApplicationStatus,
   writeFalsePositives,
+  writeIneligible,
 } from "@jat/core";
 import type { BulletRef, ModelSuggestion } from "@jat/shared";
 import { agentEnabled, runAgentTailor } from "./agent.js";
@@ -273,6 +276,32 @@ export function startServer(
           return;
         }
         json(res, 200, readFalsePositives(root));
+        return;
+      }
+      if (req.method === "GET" && req.url === "/api/ineligible") {
+        json(res, 200, readIneligible(root));
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/ineligible") {
+        let body: unknown;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          json(res, 400, { error: "invalid JSON body" });
+          return;
+        }
+        const parsed = parseIneligible(body);
+        if (!parsed) {
+          json(res, 400, { error: "invalid ineligible list" });
+          return;
+        }
+        try {
+          writeIneligible(root, parsed);
+        } catch (err) {
+          json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          return;
+        }
+        json(res, 200, readIneligible(root));
         return;
       }
       if (req.method === "GET" && req.url?.startsWith("/api/progress")) {
