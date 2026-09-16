@@ -2,6 +2,8 @@ import {
   PENDING_POSTING_KEY,
   PendingPosting,
   FalsePositives,
+  normalizeFalsePositiveEntries,
+  normalizeFalsePositiveEntry,
   OpenResponse,
   ResolveResponse,
   StatusResponse,
@@ -66,11 +68,12 @@ async function readFalsePositives(): Promise<string[]> {
 }
 
 /**
- * Single writer: the merged list goes under one key and the retired keys
- * are dropped, so a removal can never resurrect from a stale split list.
+ * Single writer: entries normalize (bare host or `host/path`), the merged
+ * list goes under one key, and the retired keys are dropped, so a removal
+ * can never resurrect from a stale split list.
  */
 async function writeFalsePositives(hosts: string[]): Promise<void> {
-  await chrome.storage.local.set({ falsePositives: [...new Set(hosts)].sort() });
+  await chrome.storage.local.set({ falsePositives: normalizeFalsePositiveEntries(hosts) });
   await chrome.storage.local.remove([...LEGACY_LIST_KEYS]);
 }
 
@@ -130,12 +133,14 @@ async function pullIgnoreLists(): Promise<void> {
 }
 
 /**
- * Every muted host lives in the one false-positives list, however it got
- * there — pill report or dashboard add. A tracked URL is never a false
- * positive: the report is refused so a saved posting can never be muted
- * out of the pill.
+ * Every mute lives in the one false-positives list, however it got there
+ * — pill report or dashboard add. Reports are path-scoped (`host/path`
+ * covers only that subtree; a bare host covers the whole host), so muting
+ * `…/dashboard/` never mutes `…/jobs/…` on the same host. A tracked URL is
+ * never a false positive: the report is refused so a saved posting can
+ * never be muted out of the pill.
  */
-async function reportFalsePositive(host: string, url: string): Promise<FpResult> {
+async function reportFalsePositive(host: string, url: string, rawEntry?: unknown): Promise<FpResult> {
   if (url) {
     const base = await serverBase();
     try {
@@ -146,18 +151,27 @@ async function reportFalsePositive(host: string, url: string): Promise<FpResult>
       // Server offline — nothing tracked that we know of; record the report.
     }
   }
+  const entry =
+    normalizeFalsePositiveEntry(rawEntry) ??
+    normalizeFalsePositiveEntry(url) ??
+    normalizeFalsePositiveEntry(host);
+  if (!entry) return { ok: false, reason: "unreadable" };
   const stored = await readFalsePositives();
-  if (!stored.includes(host)) {
-    await writeFalsePositives([...stored, host]);
+  if (!stored.includes(entry)) {
+    await writeFalsePositives([...stored, entry]);
   }
   await pushIgnoreLists();
   return { ok: true };
 }
 
-/** Pill Undo: un-mute the host and push the on-disk list. */
-async function unreportFalsePositive(host: string): Promise<FpResult> {
+/** Pill Undo: un-mute the reported entry and push the on-disk list. */
+async function unreportFalsePositive(host: string, rawEntry?: unknown, url?: string): Promise<FpResult> {
+  const entry =
+    normalizeFalsePositiveEntry(rawEntry) ??
+    (url ? normalizeFalsePositiveEntry(url) : null) ??
+    normalizeFalsePositiveEntry(host);
   const stored = await readFalsePositives();
-  await writeFalsePositives(stored.filter((h) => h !== host));
+  await writeFalsePositives(entry ? stored.filter((h) => h !== entry) : stored);
   await pushIgnoreLists();
   return { ok: true };
 }
@@ -275,13 +289,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "JAT_FP_REPORT") {
-    void reportFalsePositive(String(msg.host ?? "").toLowerCase(), String(msg.url ?? "")).then(
-      sendResponse,
-    );
+    void reportFalsePositive(
+      String(msg.host ?? "").toLowerCase(),
+      String(msg.url ?? ""),
+      msg.entry,
+    ).then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_FP_UNREPORT") {
-    void unreportFalsePositive(String(msg.host ?? "").toLowerCase()).then(sendResponse);
+    void unreportFalsePositive(
+      String(msg.host ?? "").toLowerCase(),
+      msg.entry,
+      typeof msg.url === "string" ? msg.url : undefined,
+    ).then(sendResponse);
     return true;
   }
   if (msg?.type === "JAT_OPEN_DASHBOARD") {

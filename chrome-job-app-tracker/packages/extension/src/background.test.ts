@@ -222,18 +222,44 @@ describe("JAT_PILL_STATE compatibility", () => {
 });
 
 describe("JAT_FP_REPORT", () => {
-  it("records the host for untracked URLs", async () => {
+  it("records the path-scoped entry for untracked URLs", async () => {
     routes.resolve = { ok: true, body: resolveBody(null) };
-    expect(await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" })).toEqual({
+    expect(
+      await send("JAT_FP_REPORT", {
+        host: "example.com",
+        entry: "example.com/jobs/1",
+        url: "https://example.com/jobs/1",
+      }),
+    ).toEqual({
       ok: true,
     });
+    expect(localStore["falsePositives"]).toEqual(["example.com/jobs/1"]);
+  });
+
+  it("derives the entry from the URL when the pill sends host-only", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    expect(
+      await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/dashboard/" }),
+    ).toEqual({ ok: true });
+    expect(localStore["falsePositives"]).toEqual(["example.com/dashboard"]);
+  });
+
+  it("collapses root pages to a bare-host entry", async () => {
+    routes.resolve = { ok: true, body: resolveBody(null) };
+    expect(
+      await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/" }),
+    ).toEqual({ ok: true });
     expect(localStore["falsePositives"]).toEqual(["example.com"]);
   });
 
   it("refuses tracked URLs — a saved posting is never a false positive", async () => {
     routes.resolve = { ok: true, body: resolveBody("applications/2026-09-09_acme_x", "draft") };
     expect(
-      await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" }),
+      await send("JAT_FP_REPORT", {
+        host: "example.com",
+        entry: "example.com/jobs/1",
+        url: "https://example.com/jobs/1",
+      }),
     ).toEqual({ ok: false, reason: "tracked" });
     expect(localStore["falsePositives"]).toBeUndefined();
   });
@@ -242,21 +268,37 @@ describe("JAT_FP_REPORT", () => {
     routes.resolve = { ok: true, body: resolveBody(null) };
     localStore["fpReported"] = ["old-reported.com"];
     localStore["fpHosts"] = ["old-hand.com"];
-    expect(await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" })).toEqual({
+    expect(
+      await send("JAT_FP_REPORT", {
+        host: "example.com",
+        entry: "example.com/jobs/1",
+        url: "https://example.com/jobs/1",
+      }),
+    ).toEqual({
       ok: true,
     });
-    expect(localStore["falsePositives"]).toEqual(["example.com", "old-hand.com", "old-reported.com"]);
+    expect(localStore["falsePositives"]).toEqual([
+      "example.com/jobs/1",
+      "old-hand.com",
+      "old-reported.com",
+    ]);
     expect(localStore["fpReported"]).toBeUndefined();
     expect(localStore["fpHosts"]).toBeUndefined();
   });
 });
 
 describe("JAT_FP_UNREPORT", () => {
-  it("removes the host and pushes storage to disk", async () => {
+  it("removes the entry and pushes storage to disk", async () => {
     routes.resolve = { ok: true, body: resolveBody(null) };
-    await send("JAT_FP_REPORT", { host: "example.com", url: "https://example.com/jobs/1" });
-    expect(localStore["falsePositives"]).toEqual(["example.com"]);
-    expect(await send("JAT_FP_UNREPORT", { host: "example.com" })).toEqual({ ok: true });
+    await send("JAT_FP_REPORT", {
+      host: "example.com",
+      entry: "example.com/jobs/1",
+      url: "https://example.com/jobs/1",
+    });
+    expect(localStore["falsePositives"]).toEqual(["example.com/jobs/1"]);
+    expect(
+      await send("JAT_FP_UNREPORT", { host: "example.com", entry: "example.com/jobs/1" }),
+    ).toEqual({ ok: true });
     expect(localStore["falsePositives"]).toEqual([]);
     const pushes = fetchCalls.filter(
       (c) => c.url.includes("/api/ignore") && (c.init?.method ?? "GET") === "POST",

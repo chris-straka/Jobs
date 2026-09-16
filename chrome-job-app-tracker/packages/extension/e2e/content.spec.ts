@@ -19,17 +19,18 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const store: Record<string, unknown> = {};
     const messages: string[] = [];
     // Stands in for background.ts: FP reports land in falsePositives.
-    const fakeBackground = (msg: { type?: string; host?: string }): unknown => {
+    const fakeBackground = (msg: { type?: string; host?: string; entry?: string }): unknown => {
       messages.push(msg?.type ?? "");
-      if (msg?.type === "JAT_FP_REPORT" && msg.host) {
+      const entry = msg.entry ?? msg.host;
+      if (msg?.type === "JAT_FP_REPORT" && entry) {
         const hosts = Array.isArray(store["falsePositives"]) ? store["falsePositives"] : [];
-        if (!(hosts as string[]).includes(msg.host)) {
-          store["falsePositives"] = [...(hosts as string[]), msg.host];
+        if (!(hosts as string[]).includes(entry)) {
+          store["falsePositives"] = [...(hosts as string[]), entry];
         }
       }
-      if (msg?.type === "JAT_FP_UNREPORT" && msg.host) {
+      if (msg?.type === "JAT_FP_UNREPORT" && entry) {
         const hosts = Array.isArray(store["falsePositives"]) ? store["falsePositives"] : [];
-        store["falsePositives"] = (hosts as string[]).filter((h) => h !== msg.host);
+        store["falsePositives"] = (hosts as string[]).filter((h) => h !== entry);
       }
       return { ok: true };
     };
@@ -43,7 +44,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
             listeners.push(fn);
           },
         },
-        sendMessage: (msg: { type?: string; host?: string }): Promise<unknown> =>
+        sendMessage: (msg: { type?: string; host?: string; entry?: string }): Promise<unknown> =>
           Promise.resolve(fakeBackground(msg)),
       },
       storage: {
@@ -108,14 +109,14 @@ test("content script extracts the posting from the real bundle", async ({ page }
     await expect(page.locator("#jat-pill button[data-act='no']")).toHaveText("False positive");
     await expect(page.locator("#jat-pill")).not.toContainText("Save this job?");
 
-    // "False positive" swaps the pill for a mute confirm and records this host.
+    // "False positive" swaps the pill for a mute confirm and records this page.
     await page.locator("#jat-pill button[data-act='no']").click();
     await expect(page.locator("#jat-pill")).toContainText("Added to the");
     await expect(page.locator("#jat-pill button[data-act='undo']")).toBeVisible();
     const store = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(store["falsePositives"]).toContain("127.0.0.1");
+    expect(store["falsePositives"]).toContain("127.0.0.1/e2e/fixture-job.html");
     // "List" opens the Manage page without dismissing the confirm.
     await page.locator("#jat-pill a[data-act='dash']").click();
     expect(await messages(page)).toContain("JAT_OPEN_DASHBOARD");
@@ -127,7 +128,7 @@ test("content script extracts the posting from the real bundle", async ({ page }
     const afterUndo = await page.evaluate(
       () => (window as unknown as { __jatStore?: Record<string, unknown> }).__jatStore ?? {},
     );
-    expect(afterUndo["falsePositives"] ?? []).not.toContain("127.0.0.1");
+    expect(afterUndo["falsePositives"] ?? []).not.toContain("127.0.0.1/e2e/fixture-job.html");
     // Reporting again re-arms the confirm, which dismisses itself: the
     // toast is a receipt, not a workspace.
     await page.locator("#jat-pill button[data-act='no']").click();

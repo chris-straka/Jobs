@@ -4,9 +4,12 @@ import {
   cleanText,
   detectTrack,
   dropJunkLines,
+  entryForFalsePositive,
   guessRegion,
   isDenied,
+  isDeniedUrl,
   isJunkLine,
+  normalizeFalsePositiveEntry,
   pickDescription,
   pickTitle,
   postingSignals,
@@ -205,6 +208,66 @@ describe("isDenied", () => {
     expect(isDenied("hiring.cafe", [])).toBe(true);
     expect(isDenied("www.hiringcafe.com", [])).toBe(true);
     expect(isDenied("careers.pcl.com", [])).toBe(false);
+  });
+
+  it("scopes path entries to their subtree", () => {
+    const list = ["www.brightnetwork.co.uk/dashboard"];
+    expect(isDenied("www.brightnetwork.co.uk", list, "/dashboard")).toBe(true);
+    expect(isDenied("www.brightnetwork.co.uk", list, "/dashboard/")).toBe(true);
+    expect(isDenied("www.brightnetwork.co.uk", list, "/dashboard/overview")).toBe(true);
+    // Sibling paths and lookalike prefixes stay visible.
+    expect(isDenied("www.brightnetwork.co.uk", list, "/jobs/123")).toBe(false);
+    expect(isDenied("www.brightnetwork.co.uk", list, "/")).toBe(false);
+    expect(isDenied("www.brightnetwork.co.uk", list, "/dashboard-jobs")).toBe(false);
+    expect(isDenied("other.co.uk", list, "/dashboard")).toBe(false);
+  });
+
+  it("keeps bare-host entries covering the whole host", () => {
+    const list = ["www.brightnetwork.co.uk"];
+    expect(isDenied("www.brightnetwork.co.uk", list, "/dashboard/")).toBe(true);
+    expect(isDenied("www.brightnetwork.co.uk", list, "/jobs/123")).toBe(true);
+    expect(isDenied("WWW.BRIGHTNETWORK.CO.UK", list, "/JOBS/123")).toBe(true);
+  });
+});
+
+describe("isDeniedUrl", () => {
+  it("parses the URL before matching entries", () => {
+    const list = ["www.brightnetwork.co.uk/dashboard"];
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/dashboard/", list)).toBe(true);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/jobs/1", list)).toBe(false);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/jobs/1", ["www.brightnetwork.co.uk"])).toBe(
+      true,
+    );
+    expect(isDeniedUrl("not a url", list)).toBe(false);
+  });
+});
+
+describe("normalizeFalsePositiveEntry", () => {
+  it("keeps paths, strips visit noise, collapses roots", () => {
+    expect(normalizeFalsePositiveEntry("https://WWW.Brightnetwork.co.uk/dashboard/?x=1")).toBe(
+      "www.brightnetwork.co.uk/dashboard",
+    );
+    expect(normalizeFalsePositiveEntry("example.com:8080/a/")).toBe("example.com/a");
+    expect(normalizeFalsePositiveEntry("https://example.com/")).toBe("example.com");
+    expect(normalizeFalsePositiveEntry("  New-Site.com ")).toBe("new-site.com");
+  });
+
+  it("rejects garbage with no usable host", () => {
+    expect(normalizeFalsePositiveEntry("not a url!!")).toBeNull();
+    expect(normalizeFalsePositiveEntry("ftp://example.com/x")).toBeNull();
+    expect(normalizeFalsePositiveEntry("")).toBeNull();
+  });
+});
+
+describe("entryForFalsePositive", () => {
+  it("stores host+path so dashboard mutes never cover job pages", () => {
+    expect(entryForFalsePositive("https://www.brightnetwork.co.uk/dashboard/", "x")).toBe(
+      "www.brightnetwork.co.uk/dashboard",
+    );
+    expect(entryForFalsePositive("https://example.com/", "example.com")).toBe("example.com");
+    expect(entryForFalsePositive("https://example.com/jobs/1?x=1", "example.com")).toBe(
+      "example.com/jobs/1",
+    );
   });
 });
 

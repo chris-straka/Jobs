@@ -63,11 +63,12 @@ test("dashboard lists, adds, and removes false-positive hosts", async ({ page })
     );
     expect(afterRm["falsePositives"]).toEqual(["jobs.example.org", "reported.example.com"]);
 
-    // The URL input adds the posting's host.
+    // The URL input adds host+path, scoped to that subtree.
     await page.locator("#add-url").fill("https://jobs.example.com/post/123?utm_source=x");
     await page.locator("#add-form button[type='submit']").click();
     await expect(page.locator("#fp-list li")).toHaveCount(3);
     await expect(page.locator("#fp-count")).toHaveText("3");
+    await expect(page.locator("#fp-list")).toContainText("jobs.example.com/post/123");
 
     // The host input normalizes and stores a bare host.
     await page.locator("#add-host").fill("  New-Site.com ");

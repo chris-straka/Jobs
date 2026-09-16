@@ -174,6 +174,16 @@ describe("false positives", () => {
     expect(merged).toEqual({ falsePositives: ["a.com", "b.com", "d.com"] });
   });
 
+  it("keeps path-scoped entries so dashboard mutes never cover job pages", async () => {
+    const root = await mkRoot();
+    writeFalsePositives(root, {
+      falsePositives: ["HTTPS://WWW.Brightnetwork.co.uk/dashboard/?x=1", "a.com", "a.com"],
+    });
+    expect(readFalsePositives(root)).toEqual({
+      falsePositives: ["a.com", "www.brightnetwork.co.uk/dashboard"],
+    });
+  });
+
   it("reads a legacy split-shape file unioned", async () => {
     const root = await mkRoot();
     await mkdir(path.join(root, ".jat"), { recursive: true });

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { appFolder, canonicalPostingUrl, guessCompany, hostFromUrlOrHost } from "./urls.js";
+import {
+  appFolder,
+  canonicalPostingUrl,
+  guessCompany,
+  hostFromUrlOrHost,
+  isDeniedUrl,
+  normalizeFalsePositiveEntries,
+  normalizeFalsePositiveEntry,
+} from "./urls.js";
 
 describe("guessCompany", () => {
   it("reads the company from ATS paths", () => {
@@ -56,6 +64,52 @@ describe("appFolder", () => {
     expect(appFolder("2026-09-09", "Acme Corp", "Backend Engineer")).toBe(
       "2026-09-09_acme-corp_backend-engineer",
     );
+  });
+});
+
+describe("normalizeFalsePositiveEntry", () => {
+  it("keeps paths, strips visit noise, collapses roots", () => {
+    expect(normalizeFalsePositiveEntry("https://WWW.Brightnetwork.co.uk/dashboard/?x=1")).toBe(
+      "www.brightnetwork.co.uk/dashboard",
+    );
+    expect(normalizeFalsePositiveEntry("example.com:8080/a/")).toBe("example.com/a");
+    expect(normalizeFalsePositiveEntry("https://example.com/")).toBe("example.com");
+    expect(normalizeFalsePositiveEntry("  New-Site.com ")).toBe("new-site.com");
+  });
+
+  it("rejects garbage with no usable host", () => {
+    expect(normalizeFalsePositiveEntry("not a url!!")).toBeNull();
+    expect(normalizeFalsePositiveEntry("not a host!!")).toBeNull();
+    expect(normalizeFalsePositiveEntry("")).toBeNull();
+    expect(normalizeFalsePositiveEntry("ftp://example.com/x")).toBeNull();
+  });
+});
+
+describe("normalizeFalsePositiveEntries", () => {
+  it("normalizes, dedupes, and sorts; legacy hosts pass through", () => {
+    expect(
+      normalizeFalsePositiveEntries([
+        "HTTPS://WWW.Brightnetwork.co.uk/dashboard/",
+        "a.com",
+        "a.com",
+        "not a host!!",
+      ]),
+    ).toEqual(["a.com", "www.brightnetwork.co.uk/dashboard"]);
+    expect(normalizeFalsePositiveEntries("nope")).toEqual([]);
+  });
+});
+
+describe("isDeniedUrl", () => {
+  it("scopes path entries to their subtree", () => {
+    const list = ["www.brightnetwork.co.uk/dashboard"];
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/dashboard/", list)).toBe(true);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/dashboard/x", list)).toBe(true);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/jobs/1", list)).toBe(false);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/dashboard-jobs", list)).toBe(false);
+    expect(isDeniedUrl("https://www.brightnetwork.co.uk/jobs/1", ["www.brightnetwork.co.uk"])).toBe(
+      true,
+    );
+    expect(isDeniedUrl("not a url", list)).toBe(false);
   });
 });
 

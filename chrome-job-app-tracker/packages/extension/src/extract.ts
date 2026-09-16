@@ -97,13 +97,92 @@ export function postingSignals(s: PostingSignals): SignalResult {
 const BUILT_IN_DENIED = /(hiring\.cafe|hiringcafe\.com)$/;
 
 /**
- * @param host lowercase hostname, e.g. from `new URL(url).hostname`
- * @param denyHosts hosts the user flagged via "False positive"
- * @returns true when the pill must stay hidden on this host
+ * Mirror of `normalizeFalsePositiveEntry` in `@jat/shared` (`urls.ts` is
+ * the canonical copy): this file stays shared-free so the content bundle
+ * stays tiny. Keep the two in sync — a bare host mutes the whole host,
+ * `host/path` mutes only that path and its children.
  */
-export function isDenied(host: string, denyHosts: string[]): boolean {
+export function normalizeFalsePositiveEntry(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  let t = raw.trim();
+  if (!t || /\s/.test(t)) return null;
+  const scheme = t.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/(.*)$/);
+  if (scheme) {
+    if (!/^https?$/i.test(scheme[1])) return null;
+    t = scheme[2];
+  }
+  const hostEnd = t.search(/[/?#]/);
+  let host = (hostEnd === -1 ? t : t.slice(0, hostEnd)).toLowerCase().replace(/\.$/, "");
+  const colon = host.indexOf(":");
+  if (colon !== -1) host = host.slice(0, colon);
+  if (!host || /[%/:]/.test(host) || !/^[a-z0-9.-]+$/.test(host)) return null;
+  let entryPath = hostEnd === -1 ? "" : t.slice(hostEnd);
+  const pathEnd = entryPath.search(/[?#]/);
+  if (pathEnd !== -1) entryPath = entryPath.slice(0, pathEnd);
+  entryPath = entryPath.toLowerCase().replace(/\/+$/, "");
+  if (!entryPath) return host;
+  if (!entryPath.startsWith("/")) entryPath = `/${entryPath}`;
+  return `${host}${entryPath}`;
+}
+
+function splitEntry(entry: string): { host: string; path: string | null } {
+  const slash = entry.indexOf("/");
+  if (slash === -1) return { host: entry, path: null };
+  return { host: entry.slice(0, slash), path: entry.slice(slash) };
+}
+
+function normalizePath(p: string): string {
+  const clean = p.toLowerCase().replace(/\/+$/, "");
+  return clean.startsWith("/") ? clean || "/" : `/${clean}`;
+}
+
+/** Whether one entry covers this host+path (segment-boundary prefix). */
+function entryCovers(host: string, path: string, rawEntry: string): boolean {
+  const entry = normalizeFalsePositiveEntry(rawEntry);
+  if (!entry) return false;
+  const { host: eHost, path: ePath } = splitEntry(entry);
+  if (host !== eHost) return false;
+  if (ePath === null) return true;
+  return path === ePath || path.startsWith(`${ePath}/`);
+}
+
+/**
+ * @param host hostname, e.g. from `new URL(url).hostname` (case-insensitive)
+ * @param denyList entries the user flagged via "False positive" (bare
+ * hosts mute the whole host, `host/path` entries only that subtree)
+ * @param path current pathname — defaults to `/`, which only bare-host
+ * entries cover
+ * @returns true when the pill must stay hidden here
+ */
+export function isDenied(host: string, denyList: string[], path = "/"): boolean {
   const h = host.toLowerCase();
-  return BUILT_IN_DENIED.test(h) || denyHosts.some((d) => d.toLowerCase() === h);
+  if (BUILT_IN_DENIED.test(h)) return true;
+  const p = normalizePath(path);
+  return denyList.some((d) => entryCovers(h, p, d));
+}
+
+/**
+ * URL form of {@link isDenied}: parses the page URL, then matches entries.
+ * Unparseable and non-http(s) URLs are never denied.
+ */
+export function isDeniedUrl(rawUrl: string, denyList: string[]): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return isDenied(url.hostname, denyList, url.pathname);
+}
+
+/**
+ * The entry a "False positive" report stores for this page: host+path, so
+ * muting `…/dashboard/` never mutes `…/jobs/…` on the same host. Root
+ * pages collapse to the bare host (whole-host mute, as before).
+ */
+export function entryForFalsePositive(rawUrl: string, fallbackHost: string): string | null {
+  return normalizeFalsePositiveEntry(rawUrl) ?? normalizeFalsePositiveEntry(fallbackHost);
 }
 
 /**

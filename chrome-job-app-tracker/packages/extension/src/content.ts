@@ -1,6 +1,7 @@
 import {
   APPLY_TEXT,
   cleanText,
+  entryForFalsePositive,
   isDenied,
   pickDescription,
   pickTitle,
@@ -286,8 +287,16 @@ function reminderPill(mode: PillMode): void {
     },
     mark: markAppliedAction,
     no: () => {
+      // Path-scoped mute: reporting `…/dashboard/` stores
+      // `host/dashboard`, which never covers `host/jobs/…`.
+      const entry = entryForFalsePositive(location.href, location.hostname);
       void chrome.runtime
-        .sendMessage({ type: "JAT_FP_REPORT", host: location.hostname, url: location.href })
+        .sendMessage({
+          type: "JAT_FP_REPORT",
+          host: location.hostname,
+          entry,
+          url: location.href,
+        })
         .then((r: unknown) => {
           // A tracked posting can never be a false positive: the report is
           // refused, and the pill says what it is instead of vanishing.
@@ -304,7 +313,12 @@ function reminderPill(mode: PillMode): void {
                 undo: () => {
                   clearFpConfirmTimer();
                   void chrome.runtime
-                    .sendMessage({ type: "JAT_FP_UNREPORT", host: location.hostname })
+                    .sendMessage({
+                      type: "JAT_FP_UNREPORT",
+                      host: location.hostname,
+                      entry,
+                      url: location.href,
+                    })
                     .then((u: unknown) => {
                       if ((u as { ok?: boolean } | null)?.ok === true) {
                         reminderPill(pillMode);
@@ -351,6 +365,7 @@ async function denied(): Promise<boolean> {
     return isDenied(
       location.hostname,
       hosts.filter((h): h is string => typeof h === "string"),
+      location.pathname,
     );
   } catch {
     return false;

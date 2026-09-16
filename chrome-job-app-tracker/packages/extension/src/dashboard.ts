@@ -1,4 +1,8 @@
-import { FalsePositives, hostFromUrlOrHost } from "@jat/shared";
+import {
+  FalsePositives,
+  normalizeFalsePositiveEntries,
+  normalizeFalsePositiveEntry,
+} from "@jat/shared";
 
 /** Retired split keys: read for migration, never written. */
 const LEGACY_KEYS = ["fpReported", "fpHosts"];
@@ -38,14 +42,14 @@ async function getList(): Promise<string[]> {
  * are dropped, so a removal can never resurrect from a stale split list.
  */
 async function setList(hosts: string[]): Promise<void> {
-  await chrome.storage.local.set({ falsePositives: [...new Set(hosts)].sort() });
+  await chrome.storage.local.set({ falsePositives: normalizeFalsePositiveEntries(hosts) });
   await chrome.storage.local.remove([...LEGACY_KEYS]);
 }
 
 /** Server payload, current or retired shape — anything else is ignored. */
 function parsePayload(body: unknown): string[] | null {
   const strict = FalsePositives.safeParse(body);
-  if (strict.success) return [...new Set(strict.data.falsePositives)].sort();
+  if (strict.success) return normalizeFalsePositiveEntries(strict.data.falsePositives);
   if (typeof body === "object" && body !== null) {
     const o = body as Record<string, unknown>;
     if ("fpReported" in o || "fpHosts" in o) {
@@ -148,18 +152,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const hostInput = el("add-host") as HTMLInputElement;
     const urlRaw = urlInput.value;
     const hostRaw = hostInput.value;
+    // The URL field keeps the path (`host/dashboard` mutes only that
+    // subtree); the host field mutes the whole host unless a path is given.
     const adds: string[] = [];
     for (const [raw, label] of [
       [urlRaw, "URL"],
       [hostRaw, "host"],
     ] as const) {
       if (!raw.trim()) continue;
-      const host = hostFromUrlOrHost(raw);
-      if (!host) {
+      const entry = normalizeFalsePositiveEntry(raw);
+      if (!entry) {
         showError(`Couldn't read a host from that ${label}.`);
         return;
       }
-      adds.push(host);
+      adds.push(entry);
     }
     if (adds.length === 0) {
       showError("Paste a posting URL or enter a host, e.g. example.com.");

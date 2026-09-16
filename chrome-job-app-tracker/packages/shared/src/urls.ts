@@ -58,6 +58,87 @@ const SUFFIX = new Set([
 export { slug };
 
 /**
+ * One false-positive entry: a bare host mutes the whole host
+ * (`example.com`), while `example.com/dashboard` mutes only that path
+ * and its children (`/dashboard`, `/dashboard/`, `/dashboard/x` — never
+ * `/dashboard-jobs` or `/jobs/1`). Always lowercase, no scheme, port,
+ * query, hash, or trailing slash; root paths collapse to the bare host.
+ *
+ * @param raw host, host+path, or full URL
+ * @returns normalized entry, or `null` when no usable host can be read
+ */
+export function normalizeFalsePositiveEntry(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  let t = raw.trim();
+  if (!t || /\s/.test(t)) return null;
+  // Strip a scheme when present; only http(s) entries carry paths.
+  const scheme = t.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/(.*)$/);
+  if (scheme) {
+    if (!/^https?$/i.test(scheme[1])) return null;
+    t = scheme[2];
+  }
+  // Host ends at the first /, ? (schemeless `host?x` form), or #.
+  const hostEnd = t.search(/[/?#]/);
+  let host = (hostEnd === -1 ? t : t.slice(0, hostEnd)).toLowerCase().replace(/\.$/, "");
+  // A port identifies the visit, never the scope — drop it.
+  const colon = host.indexOf(":");
+  if (colon !== -1) host = host.slice(0, colon);
+  if (!host || /[%/:]/.test(host) || !/^[a-z0-9.-]+$/.test(host)) return null;
+  let path = hostEnd === -1 ? "" : t.slice(hostEnd);
+  // Query and hash never scope a mute.
+  const pathEnd = path.search(/[?#]/);
+  if (pathEnd !== -1) path = path.slice(0, pathEnd);
+  path = path.toLowerCase().replace(/\/+$/, "");
+  if (!path) return host;
+  if (!path.startsWith("/")) path = `/${path}`;
+  return `${host}${path}`;
+}
+
+/**
+ * Lowercased, deduped, sorted entries — stable on disk for clean diffs.
+ * Garbage inputs drop out; legacy bare hosts pass through untouched.
+ */
+export function normalizeFalsePositiveEntries(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.map(normalizeFalsePositiveEntry).filter((e): e is string => e !== null))].sort();
+}
+
+/** Split a normalized entry into its host and optional path prefix. */
+function splitFalsePositiveEntry(entry: string): { host: string; path: string | null } {
+  const slash = entry.indexOf("/");
+  if (slash === -1) return { host: entry, path: null };
+  return { host: entry.slice(0, slash), path: entry.slice(slash) };
+}
+
+/**
+ * Whether a URL falls under any entry. Bare-host entries cover the whole
+ * host; path entries cover that path and its children only. Pure entry
+ * matching — built-in denials (aggregators) live with the caller.
+ *
+ * @param rawUrl full page URL
+ * @param denyList normalized or raw entries (each normalized before compare)
+ */
+export function isDeniedUrl(rawUrl: string, denyList: string[]): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  const path = url.pathname.toLowerCase().replace(/\/+$/, "") || "/";
+  return denyList.some((raw) => {
+    const entry = normalizeFalsePositiveEntry(raw);
+    if (!entry) return false;
+    const { host: eHost, path: ePath } = splitFalsePositiveEntry(entry);
+    if (host !== eHost) return false;
+    if (ePath === null) return true;
+    return path === ePath || path.startsWith(`${ePath}/`);
+  });
+}
+
+/**
  * Host from a pasted posting URL or a bare host. A scheme is prepended when
  * missing, so `example.com/jobs/1` and full URLs both resolve; the port is
  * dropped, matching the pill's own `location.hostname` reports. Null when

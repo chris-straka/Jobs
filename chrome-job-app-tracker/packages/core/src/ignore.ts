@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { FalsePositives } from "@jat/shared";
+import { FalsePositives, normalizeFalsePositiveEntries, normalizeFalsePositiveEntry } from "@jat/shared";
 
 const IGNORE_DIR = ".jat";
 const IGNORE_FILE = "ignore.json";
@@ -9,17 +9,18 @@ function ignorePath(root: string): string {
   return path.join(root, IGNORE_DIR, IGNORE_FILE);
 }
 
-/** Lowercase, trimmed, deduped, sorted — stable on disk for clean diffs. */
+/**
+ * Lowercase, deduped, sorted — stable on disk for clean diffs. Entries
+ * are bare hosts (whole host) or `host/path` (that path and its children);
+ * legacy bare hosts pass through untouched.
+ */
 export function normalizeHosts(hosts: unknown): string[] {
-  if (!Array.isArray(hosts)) return [];
-  return [
-    ...new Set(
-      hosts
-        .filter((h): h is string => typeof h === "string")
-        .map((h) => h.trim().toLowerCase())
-        .filter((h) => h.length > 0),
-    ),
-  ].sort();
+  return normalizeFalsePositiveEntries(hosts);
+}
+
+/** Normalize one entry: bare host or `host/path`, null when unreadable. */
+export function normalizeEntry(raw: unknown): string | null {
+  return normalizeFalsePositiveEntry(raw);
 }
 
 export function normalizeFalsePositives(list: FalsePositives): FalsePositives {
