@@ -12,13 +12,19 @@ declare global {
 }
 
 const PROFILE_URL = "https://www.linkedin.com/in/ada-lovelace";
+const FEED_URL = "https://www.linkedin.com/feed/";
+const JOBS_URL = "https://www.linkedin.com/jobs/search/";
 
 /**
  * Serves the LinkedIn fixture under a real linkedin.com hostname (route
  * fulfillment — no network) with a fake chrome API, then injects the real
- * content bundle.
+ * early (document_start) bundle.
  */
-async function bootLinkedIn(page: Page, initial: Record<string, unknown> = {}): Promise<void> {
+async function bootLinkedIn(
+  page: Page,
+  url: string = PROFILE_URL,
+  initial: Record<string, unknown> = {},
+): Promise<void> {
   await page.addInitScript((stored: Record<string, unknown>) => {
     const listeners: StorageListener[] = [];
     const store: Record<string, unknown> = { ...stored };
@@ -56,11 +62,9 @@ async function bootLinkedIn(page: Page, initial: Record<string, unknown> = {}): 
   }, initial);
   const body = await readFile(path.join(pkgDir, "e2e", "fixture-linkedin.html"), "utf8");
   await page.route("**/favicon.ico", (route) => route.abort());
-  await page.route(PROFILE_URL, (route) =>
-    route.fulfill({ status: 200, contentType: "text/html", body }),
-  );
-  await page.goto(PROFILE_URL);
-  await page.addScriptTag({ path: path.join(pkgDir, "dist", "content.js") });
+  await page.route(url, (route) => route.fulfill({ status: 200, contentType: "text/html", body }));
+  await page.goto(url);
+  await page.addScriptTag({ path: path.join(pkgDir, "dist", "linkedin-early.js") });
 }
 
 async function fireStorage(
@@ -72,6 +76,8 @@ async function fireStorage(
 
 const DISCOVERY = ["#pav", "#pymk", "#mpf", "#yml", "#atf"];
 const PREMIUM = ["#prem", "#prem2"];
+const NAVGONE = ["#nav-home", "#nav-network", "#nav-biz"];
+const ADS = ["#adrail", "#feedad"];
 
 const ALL_ON = {
   peopleAlsoViewed: true,
@@ -80,6 +86,12 @@ const ALL_ON = {
   followSuggestions: true,
   premiumUpsell: true,
   loadingSkeletons: true,
+  navHome: true,
+  navNetwork: true,
+  navBusiness: true,
+  linkedinNews: true,
+  promotedAds: true,
+  homeFeed: true,
 };
 
 const ALL_OFF = {
@@ -89,6 +101,12 @@ const ALL_OFF = {
   followSuggestions: false,
   premiumUpsell: false,
   loadingSkeletons: false,
+  navHome: false,
+  navNetwork: false,
+  navBusiness: false,
+  linkedinNews: false,
+  promotedAds: false,
+  homeFeed: false,
 };
 
 test("linkedin declutter hides discovery modules, keeps real content", async ({ page }) => {
@@ -113,15 +131,38 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
     "data-jat-linkedin-clean",
     "followSuggestions",
   );
-  // Premium cards hide via CTA link or views pitch — but the top nav's own
-  // Try Premium link never takes the header with it.
+  // Premium cards hide via CTA link or views pitch.
   for (const sel of PREMIUM) {
     await expect(page.locator(sel)).toBeHidden();
     await expect(page.locator(sel)).toHaveAttribute("data-jat-linkedin-clean", "premiumUpsell");
   }
+  // Nav items hide one by one — the header, nav, and list itself survive,
+  // and Jobs stays for the jobs-only workflow.
+  await expect(page.locator("#nav-home")).toHaveAttribute("data-jat-linkedin-clean", "navHome");
+  await expect(page.locator("#nav-network")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "navNetwork",
+  );
+  await expect(page.locator("#nav-biz")).toHaveAttribute("data-jat-linkedin-clean", "navBusiness");
+  for (const sel of NAVGONE) {
+    await expect(page.locator(sel)).toBeHidden();
+  }
+  await expect(page.locator("#nav-premium")).toBeHidden();
+  await expect(page.locator("#nav-premium")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "premiumUpsell",
+  );
   await expect(page.locator("#topnav")).toBeVisible();
-  await expect(page.locator("#nav-premium")).toBeVisible();
+  await expect(page.locator("#nav-jobs")).toBeVisible();
   expect(await page.locator("#topnav").getAttribute("data-jat-linkedin-clean")).toBeNull();
+  // News and Promoted ads hide; the main column stays (not a feed path).
+  await expect(page.locator("#news")).toBeHidden();
+  await expect(page.locator("#news")).toHaveAttribute("data-jat-linkedin-clean", "linkedinNews");
+  for (const sel of ADS) {
+    await expect(page.locator(sel)).toBeHidden();
+    await expect(page.locator(sel)).toHaveAttribute("data-jat-linkedin-clean", "promotedAds");
+  }
+  await expect(page.locator("#main")).toBeVisible();
   // Skeletons hide while skeletal.
   await expect(page.locator("#skel-static")).toBeHidden();
   await expect(page.locator("#skel-static")).toHaveAttribute(
@@ -153,12 +194,12 @@ test("linkedin toggles restore and re-hide live", async ({ page }) => {
   await expect(page.locator("#pav")).toBeHidden();
 
   await fireStorage(page, { linkedinClean: { newValue: ALL_OFF } });
-  for (const sel of [...DISCOVERY, ...PREMIUM, "#skel-static"]) {
+  for (const sel of [...DISCOVERY, ...PREMIUM, ...NAVGONE, ...ADS, "#skel-static"]) {
     await expect(page.locator(sel)).toBeVisible();
   }
 
   await fireStorage(page, { linkedinClean: { newValue: ALL_ON } });
-  for (const sel of [...DISCOVERY, ...PREMIUM, "#skel-static"]) {
+  for (const sel of [...DISCOVERY, ...PREMIUM, ...NAVGONE, ...ADS, "#skel-static"]) {
     await expect(page.locator(sel)).toBeHidden();
   }
 });
@@ -197,7 +238,7 @@ test("skeletons release when content arrives", async ({ page }) => {
 });
 
 test("linkedin declutter respects stored offs at boot", async ({ page }) => {
-  await bootLinkedIn(page, {
+  await bootLinkedIn(page, PROFILE_URL, {
     linkedinClean: {
       peopleAlsoViewed: true,
       peopleYouMayKnow: false,
@@ -210,4 +251,27 @@ test("linkedin declutter respects stored offs at boot", async ({ page }) => {
   await expect(page.locator("#pymk")).toBeVisible();
   await expect(page.locator("#yml")).toBeHidden();
   await expect(page.locator("#atf")).toBeHidden();
+});
+
+test("home feed column hides only on feed paths", async ({ page }) => {
+  await bootLinkedIn(page, FEED_URL);
+
+  await expect(page.locator("#main")).toBeHidden();
+  await expect(page.locator("#main")).toHaveAttribute("data-jat-linkedin-clean", "homeFeed");
+  // Rails survive eradication: only the feed column goes.
+  await expect(page.locator("#rail")).toBeVisible();
+  await expect(page.locator("#topnav")).toBeVisible();
+});
+
+test("promoted ads stay on jobs pages, where the label marks listings", async ({ page }) => {
+  await bootLinkedIn(page, JOBS_URL);
+
+  for (const sel of ADS) {
+    await expect(page.locator(sel)).toBeVisible();
+    expect(await page.locator(sel).getAttribute("data-jat-linkedin-clean")).toBeNull();
+  }
+  // Other groups still apply there.
+  await expect(page.locator("#pav")).toBeHidden();
+  await expect(page.locator("#news")).toBeHidden();
+  await expect(page.locator("#main")).toBeVisible();
 });

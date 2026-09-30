@@ -20,7 +20,13 @@ export type LinkedInCleanGroup =
   | "youMightLike"
   | "followSuggestions"
   | "premiumUpsell"
-  | "loadingSkeletons";
+  | "loadingSkeletons"
+  | "navHome"
+  | "navNetwork"
+  | "navBusiness"
+  | "linkedinNews"
+  | "promotedAds"
+  | "homeFeed";
 
 export interface LinkedInCleanSettings {
   peopleAlsoViewed: boolean;
@@ -29,6 +35,12 @@ export interface LinkedInCleanSettings {
   followSuggestions: boolean;
   premiumUpsell: boolean;
   loadingSkeletons: boolean;
+  navHome: boolean;
+  navNetwork: boolean;
+  navBusiness: boolean;
+  linkedinNews: boolean;
+  promotedAds: boolean;
+  homeFeed: boolean;
 }
 
 export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] = [
@@ -38,6 +50,12 @@ export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] 
   { id: "followSuggestions", label: "Add to your feed" },
   { id: "premiumUpsell", label: "“Try Premium” upsells" },
   { id: "loadingSkeletons", label: "Loading skeletons" },
+  { id: "navHome", label: "Home nav button" },
+  { id: "navNetwork", label: "My Network nav button" },
+  { id: "navBusiness", label: "For Business nav menu" },
+  { id: "linkedinNews", label: "LinkedIn News" },
+  { id: "promotedAds", label: "Promoted ads" },
+  { id: "homeFeed", label: "Home feed column" },
 ];
 
 const GROUP_IDS: LinkedInCleanGroup[] = [
@@ -47,6 +65,12 @@ const GROUP_IDS: LinkedInCleanGroup[] = [
   "followSuggestions",
   "premiumUpsell",
   "loadingSkeletons",
+  "navHome",
+  "navNetwork",
+  "navBusiness",
+  "linkedinNews",
+  "promotedAds",
+  "homeFeed",
 ];
 
 export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
@@ -56,6 +80,12 @@ export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
   followSuggestions: true,
   premiumUpsell: true,
   loadingSkeletons: true,
+  navHome: true,
+  navNetwork: true,
+  navBusiness: true,
+  linkedinNews: true,
+  promotedAds: true,
+  homeFeed: true,
 };
 
 /** Stored settings win per key; anything unreadable falls back to hiding. */
@@ -68,6 +98,12 @@ export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings 
     followSuggestions: typeof o.followSuggestions === "boolean" ? o.followSuggestions : true,
     premiumUpsell: typeof o.premiumUpsell === "boolean" ? o.premiumUpsell : true,
     loadingSkeletons: typeof o.loadingSkeletons === "boolean" ? o.loadingSkeletons : true,
+    navHome: typeof o.navHome === "boolean" ? o.navHome : true,
+    navNetwork: typeof o.navNetwork === "boolean" ? o.navNetwork : true,
+    navBusiness: typeof o.navBusiness === "boolean" ? o.navBusiness : true,
+    linkedinNews: typeof o.linkedinNews === "boolean" ? o.linkedinNews : true,
+    promotedAds: typeof o.promotedAds === "boolean" ? o.promotedAds : true,
+    homeFeed: typeof o.homeFeed === "boolean" ? o.homeFeed : true,
   };
 }
 
@@ -92,7 +128,33 @@ const GROUP_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
   { group: "followSuggestions", re: /^add to your feed\b/i },
   // The upsell card carries a CTA link plus a views pitch; either triggers.
   { group: "premiumUpsell", re: /^(try premium\b|get \d+[x×] more \S+ views\b)/i },
+  { group: "linkedinNews", re: /^linkedin news\b/i },
+  // Exact: celebration posts ("Promoted to Staff") must never match.
+  { group: "promotedAds", re: /^promoted(\s*•+)?$/i },
 ];
+
+const NAV_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
+  { group: "navHome", re: /^home$/i },
+  { group: "navNetwork", re: /^my network$/i },
+  { group: "navBusiness", re: /^for business$/i },
+];
+
+/** Exact nav labels; only consulted inside the top chrome. */
+export function groupForNav(text: string): LinkedInCleanGroup | null {
+  const t = normalizeHeading(text);
+  if (!t) return null;
+  return NAV_PATTERNS.find((p) => p.re.test(t))?.group ?? null;
+}
+
+/** Home feed column paths. Single-post permalinks stay visible. */
+export function isFeedPath(pathname: string): boolean {
+  return /^\/(feed\/?|home\/?)?$/.test(pathname);
+}
+
+/** Jobs search/detail paths, where Promoted labels mark real listings. */
+export function isJobsPath(pathname: string): boolean {
+  return pathname === "/jobs" || pathname.startsWith("/jobs/");
+}
 
 /** Which discovery group this heading starts, or null for real content. */
 export function groupForHeading(heading: string): LinkedInCleanGroup | null {
@@ -107,11 +169,11 @@ export const LINKEDIN_HIDDEN_ATTR = "data-jat-linkedin-clean";
 const HEADING_SELECTOR = "h1, h2, h3, h4, h5, h6, [role='heading']";
 
 /**
- * Headings plus CTA controls: the Premium upsell is found by its link, not
- * a heading. Buttons and links only ever match the short trigger texts —
- * the length cap below keeps long blobs out.
+ * Headings plus CTA controls and labels: the Premium upsell is found by
+ * its link, ad labels are spans. Everything only ever matches the short
+ * trigger texts — the length cap below keeps long blobs out.
  */
-const SCAN_SELECTOR = `${HEADING_SELECTOR}, a, button`;
+const SCAN_SELECTOR = `${HEADING_SELECTOR}, a, button, span`;
 
 /** Triggers are short; a match inside a long blob is a false positive. */
 const MAX_HEADING_LEN = 80;
@@ -159,6 +221,20 @@ function hasSubstance(el: Element): boolean {
  * ancestor sitting among siblings wins. Null when nothing safe is found —
  * hiding nothing beats hiding the page.
  */
+/**
+ * The nav item around a chrome trigger: the nearest list item, or the
+ * link itself when it stands alone (the Try Premium nav link has no li).
+ * Small elements only, and never a submenu container.
+ */
+function findNavItem(el: Element): Element | null {
+  if (!el.closest("header, nav")) return null;
+  const item = el.closest("li") ?? el;
+  const tag = item.tagName.toLowerCase();
+  if (tag !== "li" && tag !== "a" && tag !== "button" && tag !== "span") return null;
+  if (item.querySelector("ul, ol")) return null;
+  return item;
+}
+
 function findModuleCard(heading: Element): Element | null {
   const section = heading.closest("section");
   if (section && isSafeToHide(section) && isSingleModule(section)) return section;
@@ -188,8 +264,29 @@ export function sweepLinkedInClean(root: ParentNode, settings: LinkedInCleanSett
     if (el.closest(`[${LINKEDIN_HIDDEN_ATTR}]`)) continue;
     const text = normalizeHeading(el.textContent ?? "");
     if (!text || text.length > MAX_HEADING_LEN) continue;
+    // Inside the top chrome, only nav labels and the Premium CTA resolve —
+    // to the nav item itself, never a climbing card.
+    if (el.closest("header, nav")) {
+      const navGroup =
+        groupForNav(text) ?? (groupForHeading(text) === "premiumUpsell" ? "premiumUpsell" : null);
+      if (!navGroup || !settings[navGroup]) continue;
+      const item = findNavItem(el);
+      if (!item || item.hasAttribute(LINKEDIN_HIDDEN_ATTR)) continue;
+      (item as HTMLElement).style.display = "none";
+      item.setAttribute(LINKEDIN_HIDDEN_ATTR, navGroup);
+      hidden++;
+      continue;
+    }
     const group = groupForHeading(text);
     if (!group || !settings[group]) continue;
+    // Promoted *job listings* carry the same label: leave jobs pages alone.
+    if (
+      group === "promotedAds" &&
+      typeof location !== "undefined" &&
+      isJobsPath(location.pathname)
+    ) {
+      continue;
+    }
     const card = findModuleCard(el);
     if (!card || card.hasAttribute(LINKEDIN_HIDDEN_ATTR)) continue;
     (card as HTMLElement).style.display = "none";
@@ -279,12 +376,33 @@ export function sweepSkeletons(root: ParentNode, enabled: boolean): number {
  *
  * @returns stop function (tests only — the content script runs for page life)
  */
+/**
+ * Eradicator mode: the whole feed column goes, but only on feed paths —
+ * and it comes back on SPA navigation elsewhere, since apply() re-runs on
+ * every mutation burst.
+ */
+function sweepHomeFeed(root: ParentNode, enabled: boolean): void {
+  if (typeof (root as Document).querySelector !== "function") return;
+  const main = (root as Document).querySelector("main");
+  if (!main) return;
+  const marked = main.getAttribute(LINKEDIN_HIDDEN_ATTR) === "homeFeed";
+  const onFeed = typeof location !== "undefined" && isFeedPath(location.pathname);
+  if (enabled && onFeed && !marked) {
+    (main as HTMLElement).style.display = "none";
+    main.setAttribute(LINKEDIN_HIDDEN_ATTR, "homeFeed");
+  } else if ((!enabled || !onFeed) && marked) {
+    (main as HTMLElement).style.display = "";
+    main.removeAttribute(LINKEDIN_HIDDEN_ATTR);
+  }
+}
+
 export function startLinkedInClean(initial: LinkedInCleanSettings): () => void {
   let current = initial;
   const apply = (): void => {
     // Skeletons first: released content is then judged as a real module.
     sweepSkeletons(document, current.loadingSkeletons);
     sweepLinkedInClean(document, current);
+    sweepHomeFeed(document, current.homeFeed);
   };
   apply();
   let queued = false;
