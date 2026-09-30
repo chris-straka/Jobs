@@ -90,3 +90,17 @@ Adding a bullet means dropping one, or turning the knobs down.
 - The summaries in `content/profile.yml` say "Formerly certified..." for lapsed
   certifications. Chris is aware this reads oddly; don't silently change it to
   claim active certification.
+
+## Publishing
+
+This repo is public at github.com/chris-straka/Jobs. When a task is done
+and its gates pass, commit and push to `origin/main` without asking —
+don't leave work uncommitted for review.
+
+- Push only `main`. Never push `backup/pre-scrub` (it holds pre-scrub
+  private data); the remote's push refspec already restricts plain pushes
+  to `main`, so don't override it.
+- Never force-push without asking.
+- Never commit anything under the gitignored private paths
+  (`applications/`, `applications.csv`, `content/`, `docs/`, `.agents/`,
+  `.jat/`, `.env*`). If a task needs history surgery, stop and ask first.
