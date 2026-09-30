@@ -139,14 +139,14 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
   // Nav items hide one by one — the header, nav, and list itself survive,
   // and Jobs stays for the jobs-only workflow.
   await expect(page.locator("#nav-home")).toHaveAttribute("data-jat-linkedin-clean", "navHome");
-  await expect(page.locator("#nav-network")).toHaveAttribute(
-    "data-jat-linkedin-clean",
-    "navNetwork",
-  );
   await expect(page.locator("#nav-biz")).toHaveAttribute("data-jat-linkedin-clean", "navBusiness");
-  for (const sel of NAVGONE) {
+  for (const sel of ["#nav-home", "#nav-biz"]) {
     await expect(page.locator(sel)).toBeHidden();
   }
+  // My Network stays visible by default so invites still surface; its
+  // toggle (covered below) hides it on request.
+  await expect(page.locator("#nav-network")).toBeVisible();
+  expect(await page.locator("#nav-network").getAttribute("data-jat-linkedin-clean")).toBeNull();
   await expect(page.locator("#nav-premium")).toBeHidden();
   await expect(page.locator("#nav-premium")).toHaveAttribute(
     "data-jat-linkedin-clean",

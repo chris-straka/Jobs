@@ -129,12 +129,14 @@ describe("isJobsPath", () => {
 });
 
 describe("parseLinkedInCleanSettings", () => {
-  it("defaults to hiding everything", () => {
+  it("defaults to hiding everything except the My Network button", () => {
     expect(parseLinkedInCleanSettings(undefined)).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings(null)).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings({})).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings("nope")).toEqual(DEFAULT_LINKEDIN_CLEAN);
-    expect(Object.values(DEFAULT_LINKEDIN_CLEAN).every(Boolean)).toBe(true);
+    expect(DEFAULT_LINKEDIN_CLEAN.navNetwork).toBe(false);
+    const { navNetwork: _off, ...rest } = DEFAULT_LINKEDIN_CLEAN;
+    expect(Object.values(rest).every(Boolean)).toBe(true);
   });
 
   it("keeps explicit offs and drops garbage", () => {
@@ -154,7 +156,7 @@ describe("parseLinkedInCleanSettings", () => {
       premiumUpsell: true,
       loadingSkeletons: false,
       navHome: true,
-      navNetwork: true,
+      navNetwork: false,
       navBusiness: true,
       linkedinNews: true,
       promotedAds: true,

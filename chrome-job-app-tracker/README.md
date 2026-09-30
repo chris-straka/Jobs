@@ -46,7 +46,8 @@ for SPA inserts — plus "Try Premium" upsell cards (found by CTA link),
 loading skeletons (released when real content arrives, so legit modules
 still appear), nav buttons (Home, My Network, For Business, and the nav's
 own Try Premium link — items only, never the header), the LinkedIn News
-module, Promoted ads (skipped on jobs pages, where the label marks real
+module (My Network stays visible by default so invites surface; toggle to
+hide), Promoted ads (skipped on jobs pages, where the label marks real
 listings), and the whole home feed column on feed paths (single-post
 permalinks stay visible). The early `document_start` script hides inserts
 before first paint; the popup's LinkedIn section toggles each group live.

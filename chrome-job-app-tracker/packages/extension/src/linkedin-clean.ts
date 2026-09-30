@@ -81,14 +81,18 @@ export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
   premiumUpsell: true,
   loadingSkeletons: true,
   navHome: true,
-  navNetwork: true,
+  navNetwork: false,
   navBusiness: true,
   linkedinNews: true,
   promotedAds: true,
   homeFeed: true,
 };
 
-/** Stored settings win per key; anything unreadable falls back to hiding. */
+/**
+ * Stored settings win per key; anything unreadable falls back to the
+ * default. My Network is the one default-off group: the button stays so
+ * connection invites (often recruiters) still surface.
+ */
 export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings {
   const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   return {
@@ -99,7 +103,7 @@ export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings 
     premiumUpsell: typeof o.premiumUpsell === "boolean" ? o.premiumUpsell : true,
     loadingSkeletons: typeof o.loadingSkeletons === "boolean" ? o.loadingSkeletons : true,
     navHome: typeof o.navHome === "boolean" ? o.navHome : true,
-    navNetwork: typeof o.navNetwork === "boolean" ? o.navNetwork : true,
+    navNetwork: typeof o.navNetwork === "boolean" ? o.navNetwork : false,
     navBusiness: typeof o.navBusiness === "boolean" ? o.navBusiness : true,
     linkedinNews: typeof o.linkedinNews === "boolean" ? o.linkedinNews : true,
     promotedAds: typeof o.promotedAds === "boolean" ? o.promotedAds : true,
