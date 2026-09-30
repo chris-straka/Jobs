@@ -1,25 +1,34 @@
 /**
  * LinkedIn declutter: hides algorithmic discovery modules ("People also
- * viewed", "People you may know", "You might like", "Add to your feed") on
- * LinkedIn pages. Shared-free like extract.ts so the content bundle stays
- * tiny; popup.ts imports the settings helpers too.
+ * viewed", "People you may know", "You might like", "Add to your feed"),
+ * Premium upsell cards, and loading skeletons on LinkedIn pages.
+ * Shared-free like extract.ts so the content bundle stays tiny; popup.ts
+ * imports the settings helpers too.
  *
- * LinkedIn hashes its CSS classes, so modules are found by heading text,
- * not selectors. Headings are matched as prefixes because the row often
- * carries a trailing "Show all" control inside the same heading element.
- * English headings only — other locales keep their modules.
+ * LinkedIn hashes its CSS classes, so modules are found by heading text
+ * (or, for the upsell, its CTA link), not selectors. Headings are matched
+ * as prefixes because the row often carries a trailing "Show all" control
+ * inside the same heading element. English copy only — other locales keep
+ * their modules.
  */
 
 export const LINKEDIN_CLEAN_KEY = "linkedinClean";
 
 export type LinkedInCleanGroup =
-  "peopleAlsoViewed" | "peopleYouMayKnow" | "youMightLike" | "followSuggestions";
+  | "peopleAlsoViewed"
+  | "peopleYouMayKnow"
+  | "youMightLike"
+  | "followSuggestions"
+  | "premiumUpsell"
+  | "loadingSkeletons";
 
 export interface LinkedInCleanSettings {
   peopleAlsoViewed: boolean;
   peopleYouMayKnow: boolean;
   youMightLike: boolean;
   followSuggestions: boolean;
+  premiumUpsell: boolean;
+  loadingSkeletons: boolean;
 }
 
 export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] = [
@@ -27,6 +36,8 @@ export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] 
   { id: "peopleYouMayKnow", label: "People you may know" },
   { id: "youMightLike", label: "You might like" },
   { id: "followSuggestions", label: "Add to your feed" },
+  { id: "premiumUpsell", label: "“Try Premium” upsells" },
+  { id: "loadingSkeletons", label: "Loading skeletons" },
 ];
 
 const GROUP_IDS: LinkedInCleanGroup[] = [
@@ -34,6 +45,8 @@ const GROUP_IDS: LinkedInCleanGroup[] = [
   "peopleYouMayKnow",
   "youMightLike",
   "followSuggestions",
+  "premiumUpsell",
+  "loadingSkeletons",
 ];
 
 export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
@@ -41,6 +54,8 @@ export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
   peopleYouMayKnow: true,
   youMightLike: true,
   followSuggestions: true,
+  premiumUpsell: true,
+  loadingSkeletons: true,
 };
 
 /** Stored settings win per key; anything unreadable falls back to hiding. */
@@ -51,6 +66,8 @@ export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings 
     peopleYouMayKnow: typeof o.peopleYouMayKnow === "boolean" ? o.peopleYouMayKnow : true,
     youMightLike: typeof o.youMightLike === "boolean" ? o.youMightLike : true,
     followSuggestions: typeof o.followSuggestions === "boolean" ? o.followSuggestions : true,
+    premiumUpsell: typeof o.premiumUpsell === "boolean" ? o.premiumUpsell : true,
+    loadingSkeletons: typeof o.loadingSkeletons === "boolean" ? o.loadingSkeletons : true,
   };
 }
 
@@ -73,6 +90,8 @@ const GROUP_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
   { group: "peopleYouMayKnow", re: /^(people you may know|more suggestions for you)\b/i },
   { group: "youMightLike", re: /^(you might like|pages you might like)\b/i },
   { group: "followSuggestions", re: /^add to your feed\b/i },
+  // The upsell card carries a CTA link plus a views pitch; either triggers.
+  { group: "premiumUpsell", re: /^(try premium\b|get \d+[x×] more \S+ views\b)/i },
 ];
 
 /** Which discovery group this heading starts, or null for real content. */
@@ -87,16 +106,29 @@ export const LINKEDIN_HIDDEN_ATTR = "data-jat-linkedin-clean";
 
 const HEADING_SELECTOR = "h1, h2, h3, h4, h5, h6, [role='heading']";
 
-/** Headings are short; a match inside a long blob is a false positive. */
+/**
+ * Headings plus CTA controls: the Premium upsell is found by its link, not
+ * a heading. Buttons and links only ever match the short trigger texts —
+ * the length cap below keeps long blobs out.
+ */
+const SCAN_SELECTOR = `${HEADING_SELECTOR}, a, button`;
+
+/** Triggers are short; a match inside a long blob is a false positive. */
 const MAX_HEADING_LEN = 80;
+
+/** Page chrome is never a hide candidate, however it matches. */
+const CHROME_SELECTOR = "header, nav, footer";
 
 /**
  * Never hide the page around the module: the card must be a small leaf,
- * not a landmark, and must not swallow the main column.
+ * not a landmark or chrome, and must not swallow the main column. The
+ * chrome guard is what keeps the top nav's own "Try Premium" link from
+ * hiding the header.
  */
 function isSafeToHide(el: Element): boolean {
   const tag = el.tagName.toLowerCase();
   if (tag === "html" || tag === "body" || tag === "main") return false;
+  if (el.closest(CHROME_SELECTOR)) return false;
   return el.querySelector("main") === null;
 }
 
@@ -122,10 +154,10 @@ function hasSubstance(el: Element): boolean {
 }
 
 /**
- * The card around a discovery heading. Profile modules are <section>s;
- * rail-era cards are plain divs, where the lowest substantial ancestor
- * sitting among siblings wins. Null when nothing safe is found — hiding
- * nothing beats hiding the page.
+ * The card around a trigger (heading or CTA link). Profile modules are
+ * <section>s; rail-era cards are plain divs, where the lowest substantial
+ * ancestor sitting among siblings wins. Null when nothing safe is found —
+ * hiding nothing beats hiding the page.
  */
 function findModuleCard(heading: Element): Element | null {
   const section = heading.closest("section");
@@ -147,11 +179,11 @@ function findModuleCard(heading: Element): Element | null {
  */
 export function sweepLinkedInClean(root: ParentNode, settings: LinkedInCleanSettings): number {
   let hidden = 0;
-  const headings =
+  const triggers =
     typeof (root as Document).querySelectorAll === "function"
-      ? (root as Document).querySelectorAll(HEADING_SELECTOR)
+      ? (root as Document).querySelectorAll(SCAN_SELECTOR)
       : [];
-  for (const node of headings) {
+  for (const node of triggers) {
     const el = node as Element;
     if (el.closest(`[${LINKEDIN_HIDDEN_ATTR}]`)) continue;
     const text = normalizeHeading(el.textContent ?? "");
@@ -186,6 +218,62 @@ export function allGroupsOff(settings: LinkedInCleanSettings): boolean {
 }
 
 /**
+ * Loading placeholders. Class fragments (LinkedIn hashes the rest) plus
+ * aria-busy regions. Case-insensitive matching is CSS-wide and works in
+ * every modern browser.
+ */
+export const SKELETON_SELECTOR =
+  '[class*="skeleton" i], [class*="shimmer" i], [class*="ghost-" i], [aria-busy="true"]';
+
+/** Landmarks are never skeleton candidates — only their descendants are. */
+const LANDMARK_SELECTOR = "html, body, main, aside";
+
+/** A hidden skeleton whose content arrived: links, a heading, or real text. */
+function skeletonHasContent(el: Element): boolean {
+  if (el.querySelector("a[href], h1, h2, h3, h4, h5, h6, [role='heading']")) return true;
+  return (el.textContent ?? "").replace(/\s+/g, " ").trim().length >= 200;
+}
+
+/**
+ * Hides loading placeholders, releasing any whose content has since
+ * arrived (same-node replacement) so the heading sweep can judge the real
+ * module: legit content reappears, discovery content is re-hidden under
+ * its own group. Skeletons can't be attributed to a group pre-load, so
+ * they share one toggle instead of following the module toggles.
+ */
+export function sweepSkeletons(root: ParentNode, enabled: boolean): number {
+  if (typeof (root as Document).querySelectorAll !== "function") return 0;
+  const doc = root as Document;
+  if (!enabled) {
+    restoreLinkedInClean(root, "loadingSkeletons");
+    return 0;
+  }
+  // Release first: content that arrived inside a hidden skeleton must be
+  // visible (or re-hidden as discovery) before new placeholders hide.
+  for (const node of doc.querySelectorAll(`[${LINKEDIN_HIDDEN_ATTR}="loadingSkeletons"]`)) {
+    const el = node as Element;
+    if (!(node as Element).matches?.(SKELETON_SELECTOR) || skeletonHasContent(el)) {
+      (el as HTMLElement).style.display = "";
+      el.removeAttribute(LINKEDIN_HIDDEN_ATTR);
+    }
+  }
+  let hidden = 0;
+  for (const node of doc.querySelectorAll(SKELETON_SELECTOR)) {
+    const el = node as Element;
+    if (el.closest(`[${LINKEDIN_HIDDEN_ATTR}]`)) continue;
+    if (el.closest(CHROME_SELECTOR)) continue;
+    if (el.matches(LANDMARK_SELECTOR)) continue;
+    if (el.hasAttribute(LINKEDIN_HIDDEN_ATTR)) continue;
+    // Content already there (a busy region mid-render, not a placeholder).
+    if (skeletonHasContent(el)) continue;
+    (el as HTMLElement).style.display = "none";
+    el.setAttribute(LINKEDIN_HIDDEN_ATTR, "loadingSkeletons");
+    hidden++;
+  }
+  return hidden;
+}
+
+/**
  * First sweep plus a coalesced observer for SPA inserts, and a storage
  * listener so popup toggles apply live without a reload. Server-free.
  *
@@ -194,6 +282,8 @@ export function allGroupsOff(settings: LinkedInCleanSettings): boolean {
 export function startLinkedInClean(initial: LinkedInCleanSettings): () => void {
   let current = initial;
   const apply = (): void => {
+    // Skeletons first: released content is then judged as a real module.
+    sweepSkeletons(document, current.loadingSkeletons);
     sweepLinkedInClean(document, current);
   };
   apply();

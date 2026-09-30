@@ -49,13 +49,31 @@ describe("groupForHeading", () => {
     expect(groupForHeading("Add to your feed")).toBe("followSuggestions");
   });
 
+  it("maps the premium upsell CTA and views pitch", () => {
+    expect(groupForHeading("Try Premium")).toBe("premiumUpsell");
+    expect(groupForHeading("Try Premium for CA$0")).toBe("premiumUpsell");
+    expect(groupForHeading("Get 4x more recruiter views on average with AI tools")).toBe(
+      "premiumUpsell",
+    );
+    expect(groupForHeading("get 2× more profile views")).toBe("premiumUpsell");
+  });
+
   it("survives a trailing Show all control in the same heading", () => {
     expect(groupForHeading("People also viewed Show all")).toBe("peopleAlsoViewed");
     expect(groupForHeading("people you may know  show all")).toBe("peopleYouMayKnow");
   });
 
   it("leaves real content alone", () => {
-    for (const heading of ["", "Experience", "People", "About", "Add a skill", "Feed"]) {
+    for (const heading of [
+      "",
+      "Experience",
+      "People",
+      "About",
+      "Add a skill",
+      "Feed",
+      "Premium",
+      "Get more views on your posts",
+    ]) {
       expect(groupForHeading(heading)).toBeNull();
     }
   });
@@ -75,6 +93,7 @@ describe("parseLinkedInCleanSettings", () => {
       parseLinkedInCleanSettings({
         peopleAlsoViewed: false,
         peopleYouMayKnow: "yes",
+        loadingSkeletons: false,
         extra: true,
       }),
     ).toEqual({
@@ -82,6 +101,8 @@ describe("parseLinkedInCleanSettings", () => {
       peopleYouMayKnow: true,
       youMightLike: true,
       followSuggestions: true,
+      premiumUpsell: true,
+      loadingSkeletons: false,
     });
   });
 });
@@ -95,6 +116,8 @@ describe("allGroupsOff", () => {
         peopleYouMayKnow: false,
         youMightLike: false,
         followSuggestions: false,
+        premiumUpsell: false,
+        loadingSkeletons: false,
       }),
     ).toBe(true);
   });

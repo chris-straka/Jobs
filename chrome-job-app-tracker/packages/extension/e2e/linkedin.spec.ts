@@ -71,6 +71,25 @@ async function fireStorage(
 }
 
 const DISCOVERY = ["#pav", "#pymk", "#mpf", "#yml", "#atf"];
+const PREMIUM = ["#prem", "#prem2"];
+
+const ALL_ON = {
+  peopleAlsoViewed: true,
+  peopleYouMayKnow: true,
+  youMightLike: true,
+  followSuggestions: true,
+  premiumUpsell: true,
+  loadingSkeletons: true,
+};
+
+const ALL_OFF = {
+  peopleAlsoViewed: false,
+  peopleYouMayKnow: false,
+  youMightLike: false,
+  followSuggestions: false,
+  premiumUpsell: false,
+  loadingSkeletons: false,
+};
 
 test("linkedin declutter hides discovery modules, keeps real content", async ({ page }) => {
   await bootLinkedIn(page);
@@ -93,6 +112,21 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
   await expect(page.locator("#atf")).toHaveAttribute(
     "data-jat-linkedin-clean",
     "followSuggestions",
+  );
+  // Premium cards hide via CTA link or views pitch — but the top nav's own
+  // Try Premium link never takes the header with it.
+  for (const sel of PREMIUM) {
+    await expect(page.locator(sel)).toBeHidden();
+    await expect(page.locator(sel)).toHaveAttribute("data-jat-linkedin-clean", "premiumUpsell");
+  }
+  await expect(page.locator("#topnav")).toBeVisible();
+  await expect(page.locator("#nav-premium")).toBeVisible();
+  expect(await page.locator("#topnav").getAttribute("data-jat-linkedin-clean")).toBeNull();
+  // Skeletons hide while skeletal.
+  await expect(page.locator("#skel-static")).toBeHidden();
+  await expect(page.locator("#skel-static")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "loadingSkeletons",
   );
 });
 
@@ -118,33 +152,48 @@ test("linkedin toggles restore and re-hide live", async ({ page }) => {
   await bootLinkedIn(page);
   await expect(page.locator("#pav")).toBeHidden();
 
-  await fireStorage(page, {
-    linkedinClean: {
-      newValue: {
-        peopleAlsoViewed: false,
-        peopleYouMayKnow: false,
-        youMightLike: false,
-        followSuggestions: false,
-      },
-    },
-  });
-  for (const sel of DISCOVERY) {
+  await fireStorage(page, { linkedinClean: { newValue: ALL_OFF } });
+  for (const sel of [...DISCOVERY, ...PREMIUM, "#skel-static"]) {
     await expect(page.locator(sel)).toBeVisible();
   }
 
-  await fireStorage(page, {
-    linkedinClean: {
-      newValue: {
-        peopleAlsoViewed: true,
-        peopleYouMayKnow: true,
-        youMightLike: true,
-        followSuggestions: true,
-      },
-    },
-  });
-  for (const sel of DISCOVERY) {
+  await fireStorage(page, { linkedinClean: { newValue: ALL_ON } });
+  for (const sel of [...DISCOVERY, ...PREMIUM, "#skel-static"]) {
     await expect(page.locator(sel)).toBeHidden();
   }
+});
+
+test("skeletons release when content arrives", async ({ page }) => {
+  await bootLinkedIn(page);
+  await expect(page.locator("#skel-legit")).toBeHidden();
+  await expect(page.locator("#skel-disc")).toBeHidden();
+
+  // Same-node replacement: the skeleton becomes a legit card.
+  await page.evaluate(() => {
+    const legit = document.getElementById("skel-legit");
+    if (legit) {
+      legit.className = "";
+      legit.innerHTML = "<h2>Profile language</h2><p>English</p>";
+    }
+  });
+  await expect(page.locator("#skel-legit")).toBeVisible();
+  expect(await page.locator("#skel-legit").getAttribute("data-jat-linkedin-clean")).toBeNull();
+
+  // Same-node replacement into discovery: released, then re-hidden as
+  // the real module — the skeleton mark gives way to the module's.
+  await page.evaluate(() => {
+    const disc = document.getElementById("skel-disc");
+    if (disc) {
+      disc.removeAttribute("aria-busy");
+      disc.innerHTML =
+        '<h2>People also viewed</h2><ul><li><a href="/in/late">Late Ada</a></li></ul>';
+    }
+  });
+  await expect(page.locator("#skel-disc")).toBeHidden();
+  await expect(page.locator("#skel-disc")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "peopleAlsoViewed",
+  );
 });
 
 test("linkedin declutter respects stored offs at boot", async ({ page }) => {
