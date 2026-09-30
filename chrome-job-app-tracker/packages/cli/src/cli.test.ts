@@ -301,6 +301,47 @@ describe("ja", () => {
     }
   });
 
+  it("install-host confirms a fresh install and writes the manifest", async () => {
+    const { mkdtemp, rm, readFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const home = await mkdtemp(path.join(tmpdir(), "jat-install-"));
+    try {
+      const jobsRoot = path.resolve(trackerRoot, "..");
+      const id = "testinstallhostid0000000000000001";
+      const r = runWithEnv(
+        { HOME: home },
+        "--root",
+        jobsRoot,
+        "install-host",
+        "--id",
+        id,
+        "--browser",
+        "chrome",
+      );
+      expect(r.status).toBe(0);
+      expect(r.out).toContain(`Native host installed for extension ID ${id} (chrome).`);
+      const manifest = JSON.parse(
+        await readFile(
+          path.join(
+            home,
+            "Library",
+            "Application Support",
+            "Google",
+            "Chrome",
+            "NativeMessagingHosts",
+            "com.jobs.jat.json",
+          ),
+          "utf8",
+        ),
+      ) as { path?: unknown; allowed_origins?: unknown };
+      expect(manifest.allowed_origins).toEqual([`chrome-extension://${id}/`]);
+      expect(typeof manifest.path).toBe("string");
+      expect(existsSync(manifest.path as string)).toBe(true);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it("ensureHost skips when the host is installed, nudges when nothing is loaded", async () => {
     const { mkdtemp, mkdir, rm, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");

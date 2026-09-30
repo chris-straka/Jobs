@@ -152,7 +152,8 @@ export function unpackedExtensionId(absPath: string): string {
 /** Predicted id for the first existing candidate, or null. */
 export function predictId(candidates: string[]): { id: string; path: string } | null {
   for (const c of candidates) {
-    if (existsSync(c)) return { id: unpackedExtensionId(path.normalize(c)), path: path.normalize(c) };
+    if (existsSync(c))
+      return { id: unpackedExtensionId(path.normalize(c)), path: path.normalize(c) };
   }
   return null;
 }
@@ -166,7 +167,11 @@ export function predictId(candidates: string[]): { id: string; path: string } | 
  *
  * @returns a one-line status for the caller to print
  */
-export function ensureHost(tracker: string, candidates: string[], home: string = homedir()): string {
+export function ensureHost(
+  tracker: string,
+  candidates: string[],
+  home: string = homedir(),
+): string {
   const detected = detectExtensionId(candidates, browserDirs(home));
   if (detected) {
     if (hostInstalled(home, detected.id, detected.browser)) {
@@ -231,4 +236,5 @@ export async function installHostCommand(root: string, argv: string[]): Promise<
     return;
   }
   runInstallSh(tracker, id, targetBrowser);
+  console.log(`Native host installed for extension ID ${id} (${targetBrowser}).`);
 }

@@ -226,7 +226,10 @@ test("remove reaches the file and stays removed with a live server", async ({ pa
     await expect(page.locator("#fp-list li")).toHaveCount(0);
     await expect(page.locator("#fp-empty")).toBeVisible();
     const state = await page.evaluate(() => {
-      const w = window as unknown as { __jatStore?: Record<string, unknown>; __jatBox?: { file: unknown } };
+      const w = window as unknown as {
+        __jatStore?: Record<string, unknown>;
+        __jatBox?: { file: unknown };
+      };
       return { store: w.__jatStore ?? {}, file: w.__jatBox?.file };
     });
     expect(state.store["falsePositives"]).toEqual([]);

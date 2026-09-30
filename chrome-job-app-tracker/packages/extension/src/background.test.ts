@@ -65,7 +65,11 @@ const prevFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
   init?: RequestInit,
 ): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
   fetchCalls.push({ url, init });
-  const key = url.includes("/api/open") ? "open" : url.includes("/api/status") ? "status" : "resolve";
+  const key = url.includes("/api/open")
+    ? "open"
+    : url.includes("/api/status")
+      ? "status"
+      : "resolve";
   const r = routes[key];
   if (r instanceof Error) throw r;
   return { ok: r?.ok ?? true, json: async () => r?.body };
@@ -331,9 +335,10 @@ describe("JAT_INELIGIBLE_MARK", () => {
 
   it("refuses tracked URLs — a saved posting is never ineligible", async () => {
     routes.resolve = { ok: true, body: resolveBody("applications/2026-09-09_acme_x", "draft") };
-    expect(
-      await send("JAT_INELIGIBLE_MARK", { url: "https://example.com/jobs/1" }),
-    ).toEqual({ ok: false, reason: "tracked" });
+    expect(await send("JAT_INELIGIBLE_MARK", { url: "https://example.com/jobs/1" })).toEqual({
+      ok: false,
+      reason: "tracked",
+    });
     expect(localStore["ineligibleUrls"]).toBeUndefined();
   });
 

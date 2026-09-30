@@ -8,6 +8,12 @@ import {
   postingSignals,
   type PageCandidate,
 } from "./extract.js";
+import {
+  LINKEDIN_CLEAN_KEY,
+  isLinkedInHost,
+  parseLinkedInCleanSettings,
+  startLinkedInClean,
+} from "./linkedin-clean.js";
 
 const SELECTORS = [
   "article",
@@ -484,12 +490,30 @@ function armConfirmTimer(): void {
   confirmTimer = window.setTimeout(removePill, CONFIRM_MS);
 }
 
+/**
+ * LinkedIn discovery hiding. Hostname-gated, storage-backed, and
+ * server-free — and it never throws, so declutter can never break capture.
+ * Runs even where the pill is muted: a false-positive mute is about the
+ * pill, not the page cleanup.
+ */
+async function startDeclutter(): Promise<void> {
+  try {
+    if (!isLinkedInHost(location.hostname)) return;
+    const stored = await chrome.storage.local.get([LINKEDIN_CLEAN_KEY]);
+    startLinkedInClean(parseLinkedInCleanSettings(stored[LINKEDIN_CLEAN_KEY]));
+  } catch {
+    // Declutter is cosmetic — capture proceeds without it.
+  }
+}
+
 void (async () => {
   // After an extension reload, stale instances in open tabs lose their
   // context (chrome.runtime.id goes undefined) and every chrome.* call
   // throws "Extension context invalidated". Bail silently — the fresh
   // script runs when the tab reloads.
   if (!chrome.runtime?.id) return;
+  // Unawaited: the observer guards late SPA inserts, so capture need not wait.
+  void startDeclutter();
   if (await denied()) return;
   const posting = readPosting();
   cachedPosting = posting;

@@ -38,6 +38,15 @@ enforces one page and no TODO bullets, and suggested bullet ids are filtered
 against the library in code — unknown ids are dropped, so the model cannot
 invent experience into a factual document.
 
+LinkedIn declutter (same extension, no server needed): on `linkedin.com`
+pages the content script hides the discovery modules — "People also
+viewed" (plus "More profiles for you"), "People you may know", "You might
+like", and "Add to your feed" — matched by heading text with an observer
+for SPA inserts. The popup's LinkedIn section toggles each group live.
+Job modules ("Top job picks", "Recommended for you") are deliberately left
+alone. English headings only; when LinkedIn renames a module, update
+`LINKEDIN_CLEAN_GROUPS`/patterns in `packages/extension/src/linkedin-clean.ts`.
+
 ## Quickstart
 
 ```bash

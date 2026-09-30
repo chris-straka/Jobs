@@ -76,8 +76,7 @@ export async function checkEligibility(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(45000),
     });
-    if (!res.ok)
-      return { ...disabled(), disabled: false, raw: `model error: HTTP ${res.status}` };
+    if (!res.ok) return { ...disabled(), disabled: false, raw: `model error: HTTP ${res.status}` };
     const text = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };

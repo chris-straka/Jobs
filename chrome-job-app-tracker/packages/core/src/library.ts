@@ -104,7 +104,10 @@ export function findByUrl(root: string, url: string): string | null {
   } catch {
     return null;
   }
-  entries = entries.filter((e) => !e.startsWith(".")).sort().reverse();
+  entries = entries
+    .filter((e) => !e.startsWith("."))
+    .sort()
+    .reverse();
   for (const e of entries) {
     try {
       const job = readFileSync(path.join(root, "applications", e, "job.md"), "utf8");
@@ -129,7 +132,10 @@ export function readSavedDescription(root: string, folder: string): string | nul
     if (lines[0] !== "---") return job.trim() || null;
     const end = lines.indexOf("---", 1);
     if (end === -1) return null;
-    const body = lines.slice(end + 1).join("\n").trim();
+    const body = lines
+      .slice(end + 1)
+      .join("\n")
+      .trim();
     return body || null;
   } catch {
     return null;

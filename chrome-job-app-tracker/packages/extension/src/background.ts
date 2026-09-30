@@ -87,7 +87,9 @@ function parseListPayload(body: unknown): string[] | null {
   if (typeof body === "object" && body !== null) {
     const o = body as Record<string, unknown>;
     if ("fpReported" in o || "fpHosts" in o) {
-      return [...new Set([...cleanStoredList(o["fpReported"]), ...cleanStoredList(o["fpHosts"])])].sort();
+      return [
+        ...new Set([...cleanStoredList(o["fpReported"]), ...cleanStoredList(o["fpHosts"])]),
+      ].sort();
     }
   }
   return null;
@@ -143,7 +145,11 @@ async function pullIgnoreLists(): Promise<void> {
  * never a false positive: the report is refused so a saved posting can
  * never be muted out of the pill.
  */
-async function reportFalsePositive(host: string, url: string, rawEntry?: unknown): Promise<FpResult> {
+async function reportFalsePositive(
+  host: string,
+  url: string,
+  rawEntry?: unknown,
+): Promise<FpResult> {
   if (url) {
     const base = await serverBase();
     try {
@@ -168,7 +174,11 @@ async function reportFalsePositive(host: string, url: string, rawEntry?: unknown
 }
 
 /** Pill Undo: un-mute the reported entry and push the on-disk list. */
-async function unreportFalsePositive(host: string, rawEntry?: unknown, url?: string): Promise<FpResult> {
+async function unreportFalsePositive(
+  host: string,
+  rawEntry?: unknown,
+  url?: string,
+): Promise<FpResult> {
   const entry =
     normalizeFalsePositiveEntry(rawEntry) ??
     (url ? normalizeFalsePositiveEntry(url) : null) ??

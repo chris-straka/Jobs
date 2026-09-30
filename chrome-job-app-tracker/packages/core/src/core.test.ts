@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DuplicateApplication, addApplication, removeApplication } from "./add.js";
-import { buildResumes, isPageOverflow } from "./build.js";
+import { buildResumes, isPageOverflow, todoIds } from "./build.js";
 import { formatRow, parseCsv } from "./csv.js";
 import { findByUrl, loadApplicantFacts, loadInvariants, readSavedDescription } from "./library.js";
 import {
@@ -13,12 +13,7 @@ import {
   readFalsePositives,
   writeFalsePositives,
 } from "./ignore.js";
-import {
-  mergeIneligible,
-  parseIneligible,
-  readIneligible,
-  writeIneligible,
-} from "./ineligible.js";
+import { mergeIneligible, parseIneligible, readIneligible, writeIneligible } from "./ineligible.js";
 import { openApplicationFolder } from "./open.js";
 import { listApplications, readApplicationStatus, setApplicationStatus } from "./status.js";
 
@@ -359,6 +354,53 @@ describe("isPageOverflow", () => {
   });
 });
 
+describe("todoIds", () => {
+  // The gate tests below bring their own library: content/ is gitignored
+  // private data that drifts (bullets go from TODO to true), so a gate
+  // test pinned to live bullet ids breaks on honest library edits.
+  const LIBRARY = `projects:
+  - id: telemetry
+    bullets:
+      - id: gitops
+        text: "TODO: migrate deploys to GitOps"
+      - id: arch
+        text: Built the event pipeline.
+`;
+
+  async function fixtureRoot(projectsYml: string): Promise<string> {
+    const root = await mkRoot();
+    await mkdir(path.join(root, "content"), { recursive: true });
+    await writeFile(path.join(root, "content", "projects.yml"), projectsYml);
+    return root;
+  }
+
+  it("collects not-yet-true bullet ids", async () => {
+    expect(todoIds(await fixtureRoot(LIBRARY))).toEqual(["gitops"]);
+  });
+
+  it("is empty when the library is all true", async () => {
+    const root = await fixtureRoot(
+      `projects:\n  - id: telemetry\n    bullets:\n      - id: arch\n        text: Built the event pipeline.\n`,
+    );
+    expect(todoIds(root)).toEqual([]);
+  });
+
+  it("gates a TODO bullet selected in defaults.yml, without compiling", async () => {
+    const root = await fixtureRoot(LIBRARY);
+    await writeFile(
+      path.join(root, "content", "defaults.yml"),
+      `swe:\n  - id: telemetry\n    bullets: ["gitops"]\n`,
+    );
+    const r = buildResumes(root, [], () => {
+      throw new Error("typst must not run");
+    });
+    expect(r.ok).toBe(false);
+    expect(r.lines.join("\n")).toContain("TODO");
+    expect(r.lines.join("\n")).toContain("defaults.yml");
+    expect(r.lines.join("\n")).toContain("gitops");
+  });
+});
+
 describe("buildResumes", () => {
   it("reports missing targets without invoking typst", () => {
     const r = buildResumes(jobsRoot, ["applications/does-not-exist"], () => {
@@ -370,7 +412,11 @@ describe("buildResumes", () => {
 
   it("gates TODO bullets and counts pages from fixture files", async () => {
     const root = await mkRoot();
-    await cp(path.join(jobsRoot, "content"), path.join(root, "content"), { recursive: true });
+    await mkdir(path.join(root, "content"), { recursive: true });
+    await writeFile(
+      path.join(root, "content", "projects.yml"),
+      `projects:\n  - id: telemetry\n    bullets:\n      - id: gitops\n        text: "TODO: migrate deploys to GitOps"\n`,
+    );
     const dir = path.join(root, "applications", "2026-09-09_acme_x");
     await mkdir(dir, { recursive: true });
     const typ = path.join(dir, "resume.typ");
@@ -395,13 +441,37 @@ describe("buildResumes", () => {
     expect(ok.lines.join("\n")).toContain("ok");
   });
 
-  it("compiles a real scaffolded resume to one page", async () => {
+  it("reports FAILED when typst exits 0 but writes no PDF", async () => {
+    const root = await mkRoot();
+    await mkdir(path.join(root, "content"), { recursive: true });
+    await writeFile(path.join(root, "content", "projects.yml"), "projects: []\n");
+    const dir = path.join(root, "applications", "2026-09-09_acme_x");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "resume.typ"), "plain\n");
+    const r = buildResumes(root, [dir], () => ({ status: 0, output: "" }));
+    expect(r.ok).toBe(false);
+    expect(r.lines.join("\n")).toContain("FAILED");
+    expect(r.lines.join("\n")).toContain("no PDF");
+  });
+
+  it("compiles every starter (track × region) to one page", async () => {
     const root = await mkRoot();
     await cp(path.join(jobsRoot, "content"), path.join(root, "content"), { recursive: true });
     await cp(path.join(jobsRoot, "templates"), path.join(root, "templates"), { recursive: true });
-    const { folder } = addApplication(root, INPUT, "2026-09-09");
-    const r = buildResumes(root, [folder]);
-    expect(r.lines.join("\n")).toContain("ok");
-    expect(r.ok).toBe(true);
+    // Region changes the header (locations, work-auth line), track changes
+    // the whole body: swe/uk once spilled while swe/ca fit, so all six
+    // combos compile. Distinct roles keep the folders distinct.
+    for (const track of ["swe", "csa"]) {
+      for (const region of ["uk", "ca", "us"]) {
+        const { folder } = addApplication(
+          root,
+          { ...INPUT, track, region, role: `Backend Engineer ${track} ${region}` },
+          "2026-09-09",
+        );
+        const r = buildResumes(root, [folder]);
+        expect(`${track}/${region}: ${r.lines.join("\n")}`).toContain("ok");
+        expect(r.ok).toBe(true);
+      }
+    }
   }, 120000);
 });

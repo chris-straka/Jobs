@@ -34,7 +34,8 @@
 //
 // DENSITY KNOBS: when a resume spills onto page 2, turn these down before you
 // start cutting content. In rough order of what to try first:
-//   leading (0.45 -> 0.40), bullet-gap, section-gap, font-size (12 -> 11)
+//   leading (0.40; was 0.45 until the swe starter spilled), bullet-gap,
+//   section-gap, font-size (12 -> 11)
 // Below 10pt font or 0.6in margin it starts to look cramped; cut a bullet
 // instead.
 
@@ -45,7 +46,7 @@
   skills: auto, // auto = default for track; or pass an array of lines
   projects: auto,
   font-size: 12pt,
-  leading: 0.45em,
+  leading: 0.40em,
   section-gap: 17pt,
   bullet-gap: 6pt,
   project-gap: 13pt,

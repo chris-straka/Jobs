@@ -1,6 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { FalsePositives, normalizeFalsePositiveEntries, normalizeFalsePositiveEntry } from "@jat/shared";
+import {
+  FalsePositives,
+  normalizeFalsePositiveEntries,
+  normalizeFalsePositiveEntry,
+} from "@jat/shared";
 
 const IGNORE_DIR = ".jat";
 const IGNORE_FILE = "ignore.json";

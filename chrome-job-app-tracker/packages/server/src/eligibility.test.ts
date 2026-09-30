@@ -4,9 +4,7 @@ import { checkEligibility, eligibilitySystemPrompt } from "./eligibility.js";
 
 const FACTS: ApplicantFacts = {
   workAuth: "UK YMS Eligible (no sponsorship needed)",
-  education: [
-    "Master of Science in Computer Science, Georgia Institute of Technology (Aug 2026)",
-  ],
+  education: ["Master of Science in Computer Science, Georgia Institute of Technology (Aug 2026)"],
   invariants: ["No professional work experience (yet)."],
 };
 

@@ -348,6 +348,36 @@
         white-space: pre-wrap;
         margin-top: 8px;
       }
+      /* LinkedIn declutter: a collapsed details so capture stays the focus. */
+      #li-clean {
+        margin-top: 10px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 11px;
+        font-size: 12px;
+      }
+      #li-clean summary {
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      #li-clean label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 7px;
+        cursor: pointer;
+      }
+      #li-clean input[type="checkbox"] {
+        width: auto;
+        accent-color: var(--accent);
+      }
+      #li-clean .sub {
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
       #toast {
         position: fixed;
         left: 50%;
@@ -444,6 +474,14 @@
       <div id="result-links"></div>
       <div class="btn-row" id="result-actions"></div>
     </div>
+    <details id="li-clean">
+      <summary>LinkedIn declutter</summary>
+      <label><input type="checkbox" id="li-peopleAlsoViewed" /> Hide “People also viewed”</label>
+      <label><input type="checkbox" id="li-peopleYouMayKnow" /> Hide “People you may know”</label>
+      <label><input type="checkbox" id="li-youMightLike" /> Hide “You might like”</label>
+      <label><input type="checkbox" id="li-followSuggestions" /> Hide “Add to your feed”</label>
+      <p class="sub">Checked = hidden. Applies instantly on open LinkedIn tabs.</p>
+    </details>
     <div id="status"></div>
     <script src="dist/popup.js"></script>
   </body>

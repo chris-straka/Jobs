@@ -119,7 +119,14 @@ describe("isJunkLine", () => {
   });
 
   it("drops control and nav-link lines, keeps lookalike prose", () => {
-    for (const junk of ["Share", "Share this job", "Save job", "Print", "Home", "Back to search results"]) {
+    for (const junk of [
+      "Share",
+      "Share this job",
+      "Save job",
+      "Print",
+      "Home",
+      "Back to search results",
+    ]) {
       expect(isJunkLine(junk)).toBe(true);
     }
     // Nav blobs die on two signals; single-signal prose survives.
@@ -168,9 +175,9 @@ describe("dropJunkLines", () => {
   it("keeps junk from inflating a candidate past the threshold", () => {
     const thin = "Short role blurb. ";
     const junk = "Opens in a new tab.\n".repeat(30);
-    expect(
-      pickDescription("Fallback title", [{ source: "main", text: thin + junk }]),
-    ).toBe("Fallback title");
+    expect(pickDescription("Fallback title", [{ source: "main", text: thin + junk }])).toBe(
+      "Fallback title",
+    );
   });
 });
 

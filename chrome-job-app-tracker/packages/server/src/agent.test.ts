@@ -198,7 +198,12 @@ describe("agent tailoring", () => {
       signal: ac.signal,
       spawnFn: () => new Promise(() => {}),
     });
-    expect(run).toEqual({ draftWritten: false, bullets: 0, notesWritten: false, raw: "cancelled by user" });
+    expect(run).toEqual({
+      draftWritten: false,
+      bullets: 0,
+      notesWritten: false,
+      raw: "cancelled by user",
+    });
     // The run started (agent stage) then cancelled before any tool stages.
     expect(stages).toEqual(["agent"]);
   });

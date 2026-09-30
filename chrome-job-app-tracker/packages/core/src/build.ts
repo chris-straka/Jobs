@@ -120,6 +120,13 @@ export function buildResumes(
       fail = true;
       continue;
     }
+    // Success without a PDF (a lying runner, a vanishing file) reports,
+    // never throws: every build outcome is a line, not a stack trace.
+    if (!existsSync(t.out)) {
+      lines.push(`  FAILED   ${rel}  <- typst exited 0 but wrote no PDF`);
+      fail = true;
+      continue;
+    }
     // Typst writes an uncompressed page tree, so /Count is greppable.
     const pdf = readFileSync(t.out, "latin1");
     const m = /\/Count (\d+)/.exec(pdf);

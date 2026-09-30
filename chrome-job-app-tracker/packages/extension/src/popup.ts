@@ -11,6 +11,12 @@ import {
 } from "@jat/shared";
 import { guessCompany } from "@jat/shared";
 import { detectTrack, guessRegion, samePostingText } from "./extract.js";
+import {
+  LINKEDIN_CLEAN_GROUPS,
+  LINKEDIN_CLEAN_KEY,
+  parseLinkedInCleanSettings,
+  type LinkedInCleanSettings,
+} from "./linkedin-clean.js";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8765";
 
@@ -640,36 +646,37 @@ async function save(): Promise<void> {
   const manualTimeout = window.setTimeout(() => manual.abort(), 600000);
   const cancelBtn = el("cancel-save") as HTMLButtonElement;
   let cancelled = false;
-  cancelBtn.onclick = () => void (async () => {
-    cancelBtn.disabled = true;
-    show("Cancelling…");
-    let killed = false;
-    try {
-      const r = await fetch(`${server}/api/cancel`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clientId }),
-        signal: AbortSignal.timeout(5000),
-      });
-      killed = r.ok;
-    } catch {
-      // Server gone — killed stays false.
-    }
-    if (!killed) {
-      // Unknown capture: already finished or server gone. Keep waiting —
-      // the save itself will report.
-      cancelBtn.disabled = false;
-      show("Cancel didn't land — still saving…");
-      return;
-    }
-    cancelled = true;
-    manual.abort();
-    stopProgress();
-    window.clearTimeout(manualTimeout);
-    setSavingUI(false);
-    saving = false;
-    show("Cancelled — nothing saved.");
-  })();
+  cancelBtn.onclick = () =>
+    void (async () => {
+      cancelBtn.disabled = true;
+      show("Cancelling…");
+      let killed = false;
+      try {
+        const r = await fetch(`${server}/api/cancel`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ clientId }),
+          signal: AbortSignal.timeout(5000),
+        });
+        killed = r.ok;
+      } catch {
+        // Server gone — killed stays false.
+      }
+      if (!killed) {
+        // Unknown capture: already finished or server gone. Keep waiting —
+        // the save itself will report.
+        cancelBtn.disabled = false;
+        show("Cancel didn't land — still saving…");
+        return;
+      }
+      cancelled = true;
+      manual.abort();
+      stopProgress();
+      window.clearTimeout(manualTimeout);
+      setSavingUI(false);
+      saving = false;
+      show("Cancelled — nothing saved.");
+    })();
   let res: Response;
   try {
     res = await fetch(`${server}/api/capture`, {
@@ -846,7 +853,9 @@ async function markIneligibleFromPopup(): Promise<void> {
   }
   const ok = (r as { ok?: boolean } | null)?.ok === true;
   showToast(
-    ok ? "Marked ineligible ✓ — see the Manage page." : "Already saved — can't rule out a tracked posting.",
+    ok
+      ? "Marked ineligible ✓ — see the Manage page."
+      : "Already saved — can't rule out a tracked posting.",
   );
 }
 
@@ -886,6 +895,31 @@ async function markApplied(): Promise<void> {
   );
 }
 
+/**
+ * LinkedIn declutter checkboxes. Checked means hidden; every change writes
+ * storage, and the content script's storage listener applies it live on
+ * open LinkedIn tabs — no reload, no server.
+ */
+async function initLinkedInClean(): Promise<void> {
+  let current: LinkedInCleanSettings;
+  try {
+    const stored = await chrome.storage.local.get([LINKEDIN_CLEAN_KEY]);
+    current = parseLinkedInCleanSettings(stored[LINKEDIN_CLEAN_KEY]);
+  } catch {
+    return;
+  }
+  for (const { id } of LINKEDIN_CLEAN_GROUPS) {
+    const box = el(`li-${id}`) as HTMLInputElement;
+    box.checked = current[id];
+    box.addEventListener("change", () => {
+      current = { ...current, [id]: box.checked };
+      void chrome.storage.local.set({ [LINKEDIN_CLEAN_KEY]: current }).catch(() => {
+        showToast("Couldn't save the LinkedIn setting.");
+      });
+    });
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   (el("description") as HTMLTextAreaElement).addEventListener("input", updateCount);
   el("manual-entry").addEventListener("click", () => {
@@ -907,6 +941,7 @@ document.addEventListener("DOMContentLoaded", () => {
     await prefill();
     await checkHealth();
     await refreshNative();
+    await initLinkedInClean();
   })();
   // The popup is short-lived, but while it's open keep the state honest.
   let polling = false;

@@ -100,7 +100,9 @@ export function normalizeFalsePositiveEntry(raw: unknown): string | null {
  */
 export function normalizeFalsePositiveEntries(list: unknown): string[] {
   if (!Array.isArray(list)) return [];
-  return [...new Set(list.map(normalizeFalsePositiveEntry).filter((e): e is string => e !== null))].sort();
+  return [
+    ...new Set(list.map(normalizeFalsePositiveEntry).filter((e): e is string => e !== null)),
+  ].sort();
 }
 
 /** Split a normalized entry into its host and optional path prefix. */
