@@ -92,6 +92,8 @@ const ALL_ON = {
   linkedinNews: true,
   promotedAds: true,
   homeFeed: true,
+  navNotifications: true,
+  profileAnalytics: true,
 };
 
 const ALL_OFF = {
@@ -107,6 +109,8 @@ const ALL_OFF = {
   linkedinNews: false,
   promotedAds: false,
   homeFeed: false,
+  navNotifications: false,
+  profileAnalytics: false,
 };
 
 test("linkedin declutter hides discovery modules, keeps real content", async ({ page }) => {
@@ -143,10 +147,12 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
   for (const sel of ["#nav-home", "#nav-biz"]) {
     await expect(page.locator(sel)).toBeHidden();
   }
-  // My Network stays visible by default so invites still surface; its
-  // toggle (covered below) hides it on request.
+  // My Network and Notifications stay visible by default so invites
+  // and updates still surface; their toggles (covered below) hide them.
   await expect(page.locator("#nav-network")).toBeVisible();
   expect(await page.locator("#nav-network").getAttribute("data-jat-linkedin-clean")).toBeNull();
+  await expect(page.locator("#nav-notif")).toBeVisible();
+  expect(await page.locator("#nav-notif").getAttribute("data-jat-linkedin-clean")).toBeNull();
   await expect(page.locator("#nav-premium")).toBeHidden();
   await expect(page.locator("#nav-premium")).toHaveAttribute(
     "data-jat-linkedin-clean",
@@ -163,6 +169,30 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
     await expect(page.locator(sel)).toHaveAttribute("data-jat-linkedin-clean", "promotedAds");
   }
   await expect(page.locator("#main")).toBeVisible();
+  // Premium-adjacent controls resolve small: the dropdown item goes, the
+  // menu and its siblings stay; the toolbar button goes, the card stays.
+  await expect(page.locator("#redeem-li")).toBeHidden();
+  await expect(page.locator("#redeem-li")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "premiumUpsell",
+  );
+  await expect(page.locator("#settings-li")).toBeVisible();
+  await expect(page.locator("#memenu")).toBeVisible();
+  await expect(page.locator("#enhance-btn")).toBeHidden();
+  await expect(page.locator("#enhance-btn")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "premiumUpsell",
+  );
+  await expect(page.locator("#toolbar")).toBeVisible();
+  // Href fallback: unrecognized CTA text still hides by link target.
+  await expect(page.locator("#prem3")).toBeHidden();
+  await expect(page.locator("#prem3")).toHaveAttribute("data-jat-linkedin-clean", "premiumUpsell");
+  // Analytics section hides as a module.
+  await expect(page.locator("#analytics")).toBeHidden();
+  await expect(page.locator("#analytics")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "profileAnalytics",
+  );
   // Skeletons hide while skeletal.
   await expect(page.locator("#skel-static")).toBeHidden();
   await expect(page.locator("#skel-static")).toHaveAttribute(
@@ -194,12 +224,34 @@ test("linkedin toggles restore and re-hide live", async ({ page }) => {
   await expect(page.locator("#pav")).toBeHidden();
 
   await fireStorage(page, { linkedinClean: { newValue: ALL_OFF } });
-  for (const sel of [...DISCOVERY, ...PREMIUM, ...NAVGONE, ...ADS, "#skel-static"]) {
+  for (const sel of [
+    ...DISCOVERY,
+    ...PREMIUM,
+    ...NAVGONE,
+    ...ADS,
+    "#skel-static",
+    "#nav-notif",
+    "#redeem-li",
+    "#enhance-btn",
+    "#analytics",
+    "#prem3",
+  ]) {
     await expect(page.locator(sel)).toBeVisible();
   }
 
   await fireStorage(page, { linkedinClean: { newValue: ALL_ON } });
-  for (const sel of [...DISCOVERY, ...PREMIUM, ...NAVGONE, ...ADS, "#skel-static"]) {
+  for (const sel of [
+    ...DISCOVERY,
+    ...PREMIUM,
+    ...NAVGONE,
+    ...ADS,
+    "#skel-static",
+    "#nav-notif",
+    "#redeem-li",
+    "#enhance-btn",
+    "#analytics",
+    "#prem3",
+  ]) {
     await expect(page.locator(sel)).toBeHidden();
   }
 });

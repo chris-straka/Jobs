@@ -4,9 +4,11 @@ import {
   allGroupsOff,
   groupForHeading,
   groupForNav,
+  groupForSmallTarget,
   isFeedPath,
   isJobsPath,
   isLinkedInHost,
+  navGroupForHref,
   normalizeHeading,
   parseLinkedInCleanSettings,
 } from "./linkedin-clean.js";
@@ -68,6 +70,11 @@ describe("groupForHeading", () => {
     expect(groupForHeading("Promoted to Staff Engineer")).toBeNull();
   });
 
+  it("maps profile analytics", () => {
+    expect(groupForHeading("Analytics")).toBe("profileAnalytics");
+    expect(groupForHeading("Analytics dashboard")).toBeNull();
+  });
+
   it("survives a trailing Show all control in the same heading", () => {
     expect(groupForHeading("People also viewed Show all")).toBe("peopleAlsoViewed");
     expect(groupForHeading("people you may know  show all")).toBe("peopleYouMayKnow");
@@ -97,11 +104,53 @@ describe("groupForNav", () => {
     expect(groupForNav("Home")).toBe("navHome");
     expect(groupForNav("My Network")).toBe("navNetwork");
     expect(groupForNav("For Business")).toBe("navBusiness");
+    expect(groupForNav("Notifications")).toBe("navNotifications");
+  });
+
+  it("strips a trailing badge count", () => {
+    expect(groupForNav("Home 3")).toBe("navHome");
+    expect(groupForNav("My Network 12")).toBe("navNetwork");
   });
 
   it("rejects near-misses", () => {
-    for (const label of ["", "Homes", "Home2", "My Networks", "For Businesses", "Jobs", "News"]) {
+    for (const label of [
+      "",
+      "Homes",
+      "Home2",
+      "My Networks",
+      "For Businesses",
+      "Jobs",
+      "News",
+      "Notification",
+    ]) {
       expect(groupForNav(label)).toBeNull();
+    }
+  });
+});
+
+describe("navGroupForHref", () => {
+  it("resolves nav destinations from relative or absolute hrefs", () => {
+    expect(navGroupForHref("/feed/")).toBe("navHome");
+    expect(navGroupForHref("https://www.linkedin.com/mynetwork/")).toBe("navNetwork");
+    expect(navGroupForHref("/premium/checkout/")).toBe("premiumUpsell");
+  });
+
+  it("leaves Jobs and junk alone", () => {
+    for (const href of [null, "", "not a url", "/jobs/", "/in/ada", "/"]) {
+      expect(navGroupForHref(href)).toBeNull();
+    }
+  });
+});
+
+describe("groupForSmallTarget", () => {
+  it("maps redeem and enhance controls to premium", () => {
+    expect(groupForSmallTarget("Redeem Premium free trial")).toBe("premiumUpsell");
+    expect(groupForSmallTarget("Enhance profile")).toBe("premiumUpsell");
+  });
+
+  it("rejects lookalikes", () => {
+    for (const label of ["", "Enhance profile views", "Premium", "Redeem"]) {
+      expect(groupForSmallTarget(label)).toBeNull();
     }
   });
 });
@@ -129,14 +178,17 @@ describe("isJobsPath", () => {
 });
 
 describe("parseLinkedInCleanSettings", () => {
-  it("defaults to hiding everything except the My Network button", () => {
+  it("defaults to hiding everything except Network and Notifications buttons", () => {
     expect(parseLinkedInCleanSettings(undefined)).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings(null)).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings({})).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(parseLinkedInCleanSettings("nope")).toEqual(DEFAULT_LINKEDIN_CLEAN);
     expect(DEFAULT_LINKEDIN_CLEAN.navNetwork).toBe(false);
-    const { navNetwork: _off, ...rest } = DEFAULT_LINKEDIN_CLEAN;
-    expect(Object.values(rest).every(Boolean)).toBe(true);
+    expect(DEFAULT_LINKEDIN_CLEAN.navNotifications).toBe(false);
+    const restOn = Object.entries(DEFAULT_LINKEDIN_CLEAN).every(([k, v]) =>
+      k === "navNetwork" || k === "navNotifications" ? v === false : v === true,
+    );
+    expect(restOn).toBe(true);
   });
 
   it("keeps explicit offs and drops garbage", () => {
@@ -161,6 +213,8 @@ describe("parseLinkedInCleanSettings", () => {
       linkedinNews: true,
       promotedAds: true,
       homeFeed: false,
+      navNotifications: false,
+      profileAnalytics: true,
     });
   });
 });
@@ -182,6 +236,8 @@ describe("allGroupsOff", () => {
         linkedinNews: false,
         promotedAds: false,
         homeFeed: false,
+        navNotifications: false,
+        profileAnalytics: false,
       }),
     ).toBe(true);
   });

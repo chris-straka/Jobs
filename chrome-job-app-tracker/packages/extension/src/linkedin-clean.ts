@@ -1,15 +1,14 @@
 /**
- * LinkedIn declutter: hides algorithmic discovery modules ("People also
- * viewed", "People you may know", "You might like", "Add to your feed"),
- * Premium upsell cards, and loading skeletons on LinkedIn pages.
- * Shared-free like extract.ts so the content bundle stays tiny; popup.ts
- * imports the settings helpers too.
+ * LinkedIn declutter: hides discovery modules, Premium upsells, loading
+ * skeletons, nav buttons, LinkedIn News, Promoted ads, the home feed
+ * column, and profile analytics on LinkedIn pages. Shared-free like
+ * extract.ts so the content bundle stays tiny; popup.ts imports the
+ * settings helpers too.
  *
- * LinkedIn hashes its CSS classes, so modules are found by heading text
- * (or, for the upsell, its CTA link), not selectors. Headings are matched
- * as prefixes because the row often carries a trailing "Show all" control
- * inside the same heading element. English copy only — other locales keep
- * their modules.
+ * LinkedIn hashes its CSS classes, so targets are found by text (or, for
+ * nav items, link target), not selectors. Headings are matched as prefixes
+ * because the row often carries a trailing "Show all" control inside the
+ * same heading element. English copy only — other locales keep theirs.
  */
 
 export const LINKEDIN_CLEAN_KEY = "linkedinClean";
@@ -26,7 +25,9 @@ export type LinkedInCleanGroup =
   | "navBusiness"
   | "linkedinNews"
   | "promotedAds"
-  | "homeFeed";
+  | "homeFeed"
+  | "navNotifications"
+  | "profileAnalytics";
 
 export interface LinkedInCleanSettings {
   peopleAlsoViewed: boolean;
@@ -41,6 +42,8 @@ export interface LinkedInCleanSettings {
   linkedinNews: boolean;
   promotedAds: boolean;
   homeFeed: boolean;
+  navNotifications: boolean;
+  profileAnalytics: boolean;
 }
 
 export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] = [
@@ -56,6 +59,8 @@ export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] 
   { id: "linkedinNews", label: "LinkedIn News" },
   { id: "promotedAds", label: "Promoted ads" },
   { id: "homeFeed", label: "Home feed column" },
+  { id: "navNotifications", label: "Notifications nav button" },
+  { id: "profileAnalytics", label: "Profile analytics" },
 ];
 
 const GROUP_IDS: LinkedInCleanGroup[] = [
@@ -71,6 +76,8 @@ const GROUP_IDS: LinkedInCleanGroup[] = [
   "linkedinNews",
   "promotedAds",
   "homeFeed",
+  "navNotifications",
+  "profileAnalytics",
 ];
 
 export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
@@ -86,12 +93,14 @@ export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
   linkedinNews: true,
   promotedAds: true,
   homeFeed: true,
+  navNotifications: false,
+  profileAnalytics: true,
 };
 
 /**
  * Stored settings win per key; anything unreadable falls back to the
- * default. My Network is the one default-off group: the button stays so
- * connection invites (often recruiters) still surface.
+ * default. My Network and Notifications stay by default: invites and
+ * application updates surface there, so hiding them is opt-in.
  */
 export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings {
   const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
@@ -108,6 +117,8 @@ export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings 
     linkedinNews: typeof o.linkedinNews === "boolean" ? o.linkedinNews : true,
     promotedAds: typeof o.promotedAds === "boolean" ? o.promotedAds : true,
     homeFeed: typeof o.homeFeed === "boolean" ? o.homeFeed : true,
+    navNotifications: typeof o.navNotifications === "boolean" ? o.navNotifications : false,
+    profileAnalytics: typeof o.profileAnalytics === "boolean" ? o.profileAnalytics : true,
   };
 }
 
@@ -135,19 +146,56 @@ const GROUP_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
   { group: "linkedinNews", re: /^linkedin news\b/i },
   // Exact: celebration posts ("Promoted to Staff") must never match.
   { group: "promotedAds", re: /^promoted(\s*•+)?$/i },
+  { group: "profileAnalytics", re: /^analytics$/i },
 ];
 
 const NAV_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
   { group: "navHome", re: /^home$/i },
   { group: "navNetwork", re: /^my network$/i },
   { group: "navBusiness", re: /^for business$/i },
+  { group: "navNotifications", re: /^notifications$/i },
 ];
 
-/** Exact nav labels; only consulted inside the top chrome. */
+/**
+ * Exact nav labels; only consulted inside the top chrome. A trailing
+ * badge count ("Home 3") is stripped first — badges live inside the link
+ * on some pages.
+ */
 export function groupForNav(text: string): LinkedInCleanGroup | null {
-  const t = normalizeHeading(text);
+  const t = normalizeHeading(text).replace(/\s+[\d,]+$/, "");
   if (!t) return null;
   return NAV_PATTERNS.find((p) => p.re.test(t))?.group ?? null;
+}
+
+/**
+ * Nav groups by link target: immune to badges, labels, and locales.
+ * Only nav destinations resolve here — Jobs deliberately has no group.
+ */
+export function navGroupForHref(href: string | null): LinkedInCleanGroup | null {
+  if (!href) return null;
+  let path: string;
+  try {
+    path = new URL(href, "https://www.linkedin.com").pathname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (path === "/feed" || path === "/feed/") return "navHome";
+  if (path === "/mynetwork" || path.startsWith("/mynetwork/")) return "navNetwork";
+  if (path === "/premium" || path.startsWith("/premium/")) return "premiumUpsell";
+  return null;
+}
+
+/**
+ * Premium-adjacent controls that resolve to themselves, never a climbing
+ * card: the "Redeem Premium" dropdown item and the "Enhance profile"
+ * toolbar button (which sits inside the profile card — climbing would
+ * hide your whole profile).
+ */
+export function groupForSmallTarget(text: string): LinkedInCleanGroup | null {
+  const t = normalizeHeading(text);
+  if (!t) return null;
+  if (/^redeem premium\b/i.test(t) || /^enhance profile$/i.test(t)) return "premiumUpsell";
+  return null;
 }
 
 /** Home feed column paths. Single-post permalinks stay visible. */
@@ -226,16 +274,25 @@ function hasSubstance(el: Element): boolean {
  * hiding nothing beats hiding the page.
  */
 /**
- * The nav item around a chrome trigger: the nearest list item, or the
- * link itself when it stands alone (the Try Premium nav link has no li).
- * Small elements only, and never a submenu container.
+ * The small target around a trigger: the nearest list item or menu item,
+ * or the control itself when it stands alone (the Try Premium nav link
+ * has no li). Never a submenu container, and never anything that climbs
+ * past the item — this is what keeps "Enhance profile" from taking the
+ * whole profile card with it.
  */
-function findNavItem(el: Element): Element | null {
-  if (!el.closest("header, nav")) return null;
-  const item = el.closest("li") ?? el;
+function findSmallTarget(el: Element): Element | null {
+  const item = el.closest("li, [role='menuitem']") ?? el;
   const tag = item.tagName.toLowerCase();
-  if (tag !== "li" && tag !== "a" && tag !== "button" && tag !== "span") return null;
-  if (item.querySelector("ul, ol")) return null;
+  if (
+    tag !== "li" &&
+    tag !== "a" &&
+    tag !== "button" &&
+    tag !== "span" &&
+    item.getAttribute("role") !== "menuitem"
+  ) {
+    return null;
+  }
+  if (item.querySelector("ul, ol, [role='menu']")) return null;
   return item;
 }
 
@@ -268,20 +325,40 @@ export function sweepLinkedInClean(root: ParentNode, settings: LinkedInCleanSett
     if (el.closest(`[${LINKEDIN_HIDDEN_ATTR}]`)) continue;
     const text = normalizeHeading(el.textContent ?? "");
     if (!text || text.length > MAX_HEADING_LEN) continue;
-    // Inside the top chrome, only nav labels and the Premium CTA resolve —
+    // Inside the top chrome, only nav labels and Premium links resolve —
     // to the nav item itself, never a climbing card.
     if (el.closest("header, nav")) {
+      const link = el.closest("a");
+      const premiumText = (groupForHeading(text) ?? groupForSmallTarget(text)) === "premiumUpsell";
       const navGroup =
-        groupForNav(text) ?? (groupForHeading(text) === "premiumUpsell" ? "premiumUpsell" : null);
+        groupForNav(text) ??
+        navGroupForHref(link?.getAttribute("href") ?? null) ??
+        (premiumText ? "premiumUpsell" : null);
       if (!navGroup || !settings[navGroup]) continue;
-      const item = findNavItem(el);
+      const item = findSmallTarget(el);
       if (!item || item.hasAttribute(LINKEDIN_HIDDEN_ATTR)) continue;
       (item as HTMLElement).style.display = "none";
       item.setAttribute(LINKEDIN_HIDDEN_ATTR, navGroup);
       hidden++;
       continue;
     }
-    const group = groupForHeading(text);
+    // Small targets resolve before headings: these must never climb.
+    const smallGroup = groupForSmallTarget(text);
+    if (smallGroup) {
+      if (!settings[smallGroup]) continue;
+      const item = findSmallTarget(el);
+      if (!item || item.hasAttribute(LINKEDIN_HIDDEN_ATTR)) continue;
+      (item as HTMLElement).style.display = "none";
+      item.setAttribute(LINKEDIN_HIDDEN_ATTR, smallGroup);
+      hidden++;
+      continue;
+    }
+    let group = groupForHeading(text);
+    // A Premium link with unrecognized text still resolves by target.
+    if (!group) {
+      const href = el.closest("a")?.getAttribute("href") ?? null;
+      if (navGroupForHref(href) === "premiumUpsell") group = "premiumUpsell";
+    }
     if (!group || !settings[group]) continue;
     // Promoted *job listings* carry the same label: leave jobs pages alone.
     if (
