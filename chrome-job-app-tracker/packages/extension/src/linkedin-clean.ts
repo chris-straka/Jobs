@@ -1,7 +1,7 @@
 /**
  * LinkedIn declutter: hides discovery modules, Premium upsells, loading
  * skeletons, nav buttons, LinkedIn News, Promoted ads, the home feed
- * column, and profile analytics on LinkedIn pages. Shared-free like
+ * column, and profile analytics and activity on LinkedIn pages. Shared-free like
  * extract.ts so the content bundle stays tiny; popup.ts imports the
  * settings helpers too.
  *
@@ -27,7 +27,8 @@ export type LinkedInCleanGroup =
   | "promotedAds"
   | "homeFeed"
   | "navNotifications"
-  | "profileAnalytics";
+  | "profileAnalytics"
+  | "profileActivity";
 
 export interface LinkedInCleanSettings {
   peopleAlsoViewed: boolean;
@@ -44,6 +45,7 @@ export interface LinkedInCleanSettings {
   homeFeed: boolean;
   navNotifications: boolean;
   profileAnalytics: boolean;
+  profileActivity: boolean;
 }
 
 export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] = [
@@ -61,6 +63,7 @@ export const LINKEDIN_CLEAN_GROUPS: { id: LinkedInCleanGroup; label: string }[] 
   { id: "homeFeed", label: "Home feed column" },
   { id: "navNotifications", label: "Notifications nav button" },
   { id: "profileAnalytics", label: "Profile analytics" },
+  { id: "profileActivity", label: "Profile activity" },
 ];
 
 const GROUP_IDS: LinkedInCleanGroup[] = [
@@ -78,6 +81,7 @@ const GROUP_IDS: LinkedInCleanGroup[] = [
   "homeFeed",
   "navNotifications",
   "profileAnalytics",
+  "profileActivity",
 ];
 
 export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
@@ -95,6 +99,7 @@ export const DEFAULT_LINKEDIN_CLEAN: LinkedInCleanSettings = {
   homeFeed: true,
   navNotifications: false,
   profileAnalytics: true,
+  profileActivity: true,
 };
 
 /**
@@ -119,6 +124,7 @@ export function parseLinkedInCleanSettings(raw: unknown): LinkedInCleanSettings 
     homeFeed: typeof o.homeFeed === "boolean" ? o.homeFeed : true,
     navNotifications: typeof o.navNotifications === "boolean" ? o.navNotifications : false,
     profileAnalytics: typeof o.profileAnalytics === "boolean" ? o.profileAnalytics : true,
+    profileActivity: typeof o.profileActivity === "boolean" ? o.profileActivity : true,
   };
 }
 
@@ -147,6 +153,9 @@ const GROUP_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
   // Exact: celebration posts ("Promoted to Staff") must never match.
   { group: "promotedAds", re: /^promoted(\s*•+)?$/i },
   { group: "profileAnalytics", re: /^analytics$/i },
+  // Exact like Analytics, and profile-gated below: "Activity" is a
+  // common word with its own standalone page.
+  { group: "profileActivity", re: /^activity$/i },
 ];
 
 const NAV_PATTERNS: { group: LinkedInCleanGroup; re: RegExp }[] = [
@@ -206,6 +215,11 @@ export function isFeedPath(pathname: string): boolean {
 /** Jobs search/detail paths, where Promoted labels mark real listings. */
 export function isJobsPath(pathname: string): boolean {
   return pathname === "/jobs" || pathname.startsWith("/jobs/");
+}
+
+/** Profile paths, the only place an Activity section should resolve. */
+export function isProfilePath(pathname: string): boolean {
+  return pathname === "/in" || pathname.startsWith("/in/");
 }
 
 /** Which discovery group this heading starts, or null for real content. */
@@ -365,6 +379,15 @@ export function sweepLinkedInClean(root: ParentNode, settings: LinkedInCleanSett
       group === "promotedAds" &&
       typeof location !== "undefined" &&
       isJobsPath(location.pathname)
+    ) {
+      continue;
+    }
+    // Activity only resolves on profiles: the standalone recent-activity
+    // page shares the heading and must never blank itself.
+    if (
+      group === "profileActivity" &&
+      typeof location !== "undefined" &&
+      !isProfilePath(location.pathname)
     ) {
       continue;
     }

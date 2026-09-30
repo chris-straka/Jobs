@@ -8,6 +8,7 @@ import {
   isFeedPath,
   isJobsPath,
   isLinkedInHost,
+  isProfilePath,
   navGroupForHref,
   normalizeHeading,
   parseLinkedInCleanSettings,
@@ -73,6 +74,11 @@ describe("groupForHeading", () => {
   it("maps profile analytics", () => {
     expect(groupForHeading("Analytics")).toBe("profileAnalytics");
     expect(groupForHeading("Analytics dashboard")).toBeNull();
+  });
+
+  it("maps profile activity", () => {
+    expect(groupForHeading("Activity")).toBe("profileActivity");
+    expect(groupForHeading("Activity dashboard")).toBeNull();
   });
 
   it("survives a trailing Show all control in the same heading", () => {
@@ -177,6 +183,17 @@ describe("isJobsPath", () => {
   });
 });
 
+describe("isProfilePath", () => {
+  it("matches profile paths only", () => {
+    for (const p of ["/in", "/in/", "/in/ada", "/in/ada/recent-activity/all"]) {
+      expect(isProfilePath(p)).toBe(true);
+    }
+    for (const p of ["/", "/feed/", "/jobs/search", "/company/acme", "/in2"]) {
+      expect(isProfilePath(p)).toBe(false);
+    }
+  });
+});
+
 describe("parseLinkedInCleanSettings", () => {
   it("defaults to hiding everything except Network and Notifications buttons", () => {
     expect(parseLinkedInCleanSettings(undefined)).toEqual(DEFAULT_LINKEDIN_CLEAN);
@@ -215,6 +232,7 @@ describe("parseLinkedInCleanSettings", () => {
       homeFeed: false,
       navNotifications: false,
       profileAnalytics: true,
+      profileActivity: true,
     });
   });
 });
@@ -238,6 +256,7 @@ describe("allGroupsOff", () => {
         homeFeed: false,
         navNotifications: false,
         profileAnalytics: false,
+        profileActivity: false,
       }),
     ).toBe(true);
   });

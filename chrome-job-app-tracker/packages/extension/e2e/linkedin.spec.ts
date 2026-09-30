@@ -94,6 +94,7 @@ const ALL_ON = {
   homeFeed: true,
   navNotifications: true,
   profileAnalytics: true,
+  profileActivity: true,
 };
 
 const ALL_OFF = {
@@ -111,6 +112,7 @@ const ALL_OFF = {
   homeFeed: false,
   navNotifications: false,
   profileAnalytics: false,
+  profileActivity: false,
 };
 
 test("linkedin declutter hides discovery modules, keeps real content", async ({ page }) => {
@@ -193,6 +195,12 @@ test("linkedin declutter hides discovery modules, keeps real content", async ({ 
     "data-jat-linkedin-clean",
     "profileAnalytics",
   );
+  // Activity section hides as a module.
+  await expect(page.locator("#activity")).toBeHidden();
+  await expect(page.locator("#activity")).toHaveAttribute(
+    "data-jat-linkedin-clean",
+    "profileActivity",
+  );
   // Skeletons hide while skeletal.
   await expect(page.locator("#skel-static")).toBeHidden();
   await expect(page.locator("#skel-static")).toHaveAttribute(
@@ -234,6 +242,7 @@ test("linkedin toggles restore and re-hide live", async ({ page }) => {
     "#redeem-li",
     "#enhance-btn",
     "#analytics",
+    "#activity",
     "#prem3",
   ]) {
     await expect(page.locator(sel)).toBeVisible();
@@ -250,6 +259,7 @@ test("linkedin toggles restore and re-hide live", async ({ page }) => {
     "#redeem-li",
     "#enhance-btn",
     "#analytics",
+    "#activity",
     "#prem3",
   ]) {
     await expect(page.locator(sel)).toBeHidden();

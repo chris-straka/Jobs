@@ -46,7 +46,8 @@ for SPA inserts — plus "Try Premium" upsell cards (found by CTA link),
 loading skeletons (released when real content arrives, so legit modules
 still appear), nav buttons (Home, My Network, For Business, Notifications,
 and the nav's Try Premium link — matched by label or link target, items
-only, never the header), the LinkedIn News module and profile Analytics,
+only, never the header), the LinkedIn News module and profile Analytics
+and Activity (Activity resolves on profile pages only),
 Promoted ads (skipped on jobs pages, where the label marks real listings),
 menu-level Premium controls ("Redeem Premium", "Enhance profile" — the
 button only, never the card around it), and the whole home feed column on
